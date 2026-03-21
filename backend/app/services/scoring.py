@@ -43,6 +43,41 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(dot / (norm_a * norm_b))
 
 
+def pose_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    """Compute pose similarity using mean per-joint Euclidean distance.
+
+    Cosine similarity is too forgiving for normalized pose vectors because
+    all human poses have similar structure. Instead, we measure the average
+    per-joint distance and convert it to a 0-1 similarity score.
+
+    A perfect match gives 1.0. Larger distances reduce the score toward 0.
+    """
+    if a.size == 0 or b.size == 0:
+        return 0.0
+
+    # Ensure same length
+    min_len = min(len(a), len(b))
+    a = a[:min_len]
+    b = b[:min_len]
+
+    # Reshape to (N, 3) for per-joint distance
+    num_joints = min_len // 3
+    if num_joints == 0:
+        return 0.0
+
+    a_joints = a[: num_joints * 3].reshape(num_joints, 3)
+    b_joints = b[: num_joints * 3].reshape(num_joints, 3)
+
+    # Mean per-joint Euclidean distance (in normalized [0,1] space)
+    distances = np.linalg.norm(a_joints - b_joints, axis=1)
+    mean_dist = float(np.mean(distances))
+
+    # Convert distance to similarity: 0 distance -> 1.0, large distance -> 0.0
+    # A mean distance of ~0.3 in unit space should score near 0 (very bad)
+    similarity = max(0.0, 1.0 - (mean_dist / 0.35))
+    return similarity
+
+
 def grade_frame(similarity: float) -> GradeTier:
     """Assign a grade tier to a frame based on cosine similarity."""
     thresholds = get_settings().score_thresholds_parsed
@@ -80,7 +115,7 @@ def compare_frames(
         ref_norm = normalize_keypoints(reference_frames[i])
         perf_norm = normalize_keypoints(performance_frames[i])
 
-        sim = cosine_similarity(ref_norm, perf_norm)
+        sim = pose_similarity(ref_norm, perf_norm)
         grade = grade_frame(sim)
         breakdown[grade.value] += 1
         total_similarity += sim

@@ -2,20 +2,24 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import SkeletonCanvas from "@/components/SkeletonCanvas";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getChoreographyPreview, regenerateChoreography } from "@/lib/api";
+import { analyzeFeedback, getChoreographyPreview, regenerateChoreography } from "@/lib/api";
 import type { Keypoint } from "@/types";
+
+const ACCEPTED_VIDEO_TYPES = "video/mp4,video/quicktime,video/webm";
 
 export default function ChoreographyPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const { data: preview, isLoading, refetch } = useQuery({
     queryKey: ["choreography-preview", id],
@@ -26,6 +30,20 @@ export default function ChoreographyPage() {
   // Flatten all move keypoints into a single frame sequence
   const allFrames: Keypoint[][] =
     preview?.moves.flatMap((m) => m.keypoints) || [];
+
+  const handleUploadVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const result = await analyzeFeedback(file, id);
+      router.push(`/feedback/${id}?job_id=${result.job_id}`);
+    } catch (err) {
+      setIsUploading(false);
+      alert(err instanceof Error ? err.message : "Upload failed");
+    }
+  };
 
   const handleRegenerate = async () => {
     setIsRegenerating(true);
@@ -90,6 +108,22 @@ export default function ChoreographyPage() {
                 size="lg"
               >
                 Record Performance
+              </Button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ACCEPTED_VIDEO_TYPES}
+                onChange={handleUploadVideo}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                size="lg"
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {isUploading ? "Uploading..." : "Upload Video"}
               </Button>
             </div>
           </CardContent>

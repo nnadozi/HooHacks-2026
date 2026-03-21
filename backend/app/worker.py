@@ -19,4 +19,6 @@ celery_app.conf.update(
     task_track_started=True,
 )
 
-celery_app.autodiscover_tasks(["app.tasks"])
+# Explicitly import task modules so they register with the app
+import app.tasks.feedback  # noqa: F401, E402
+import app.tasks.ingest  # noqa: F401, E402

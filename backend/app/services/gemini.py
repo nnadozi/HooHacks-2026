@@ -66,7 +66,7 @@ def generate_critiques(
     """
     settings = get_settings()
     genai.configure(api_key=settings.GOOGLE_API_KEY)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-2.0-flash-lite")
 
     # Build prompt
     frame_descriptions = []
