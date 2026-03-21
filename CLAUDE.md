@@ -23,7 +23,7 @@ uvicorn app.main:app --reload      # Dev server on :8000
 celery -A app.worker worker --loglevel=info  # Run worker separately
 ```
 
-### Frontend (React)
+### Frontend (Next.js)
 ```bash
 cd frontend
 npm install
@@ -42,9 +42,11 @@ npm run build && npm run start     # Production build
 ├── backend/
 │   ├── AGENTS.md                 # Backend-specific agent instructions
 │   ├── app/
-│   │   ├── main.py               # FastAPI app, middleware, router registration
+│   │   ├── main.py               # FastAPI app, CORS, global exception handler, request logging middleware
 │   │   ├── config.py             # pydantic-settings config (all env vars)
+│   │   ├── auth.py               # Auth0 JWT validation (currently unused — kept for future use)
 │   │   ├── worker.py             # Celery app definition
+│   │   ├── db.py                 # MongoDB clients: motor (async for FastAPI) + pymongo (sync for Celery)
 │   │   ├── routers/
 │   │   │   ├── videos.py         # POST /api/videos/upload
 │   │   │   ├── jobs.py           # GET /api/jobs/{job_id}
@@ -56,35 +58,39 @@ npm run build && npm run start     # Production build
 │   │   │   └── feedback.py       # Celery task: compare performance → call Gemini
 │   │   ├── services/
 │   │   │   ├── cv.py             # OpenCV + MediaPipe keypoint extraction
-│   │   │   ├── audio.py          # librosa BPM detection
-│   │   │   ├── storage.py        # GCS/S3 upload/download helpers
+│   │   │   ├── audio.py          # librosa BPM detection (supports audio and video files)
+│   │   │   ├── storage.py        # GCS upload/download helpers (uses GCS_PROJECT_ID)
 │   │   │   ├── choreography.py   # Move sampling + sequence assembly
 │   │   │   ├── scoring.py        # Cosine similarity, grade tier logic
 │   │   │   └── gemini.py         # Gemini prompt builder + API call
-│   │   ├── models/
-│   │   │   ├── move.py           # Move Pydantic model
-│   │   │   ├── choreography.py   # Choreography Pydantic model
-│   │   │   └── feedback.py       # Feedback Pydantic model
-│   │   └── db.py                 # MongoDB client + collection accessors
+│   │   └── models/
+│   │       ├── move.py           # Move Pydantic model
+│   │       ├── choreography.py   # Choreography Pydantic model
+│   │       └── feedback.py       # Feedback Pydantic model
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
+│   ├── AGENTS.md                 # Frontend-specific agent instructions
 │   ├── src/
-│   │   ├── app/                  # Next.js app router or React routes
+│   │   ├── app/                  # Next.js 15 App Router pages
+│   │   │   ├── page.tsx          # Landing / upload (accepts audio + video)
+│   │   │   ├── choreography/[id]/page.tsx  # Skeleton preview + record
+│   │   │   └── feedback/[id]/page.tsx      # Score + critiques display
 │   │   ├── components/
 │   │   │   ├── SkeletonCanvas.tsx # HTML5 Canvas skeleton overlay renderer
 │   │   │   ├── Recorder.tsx      # getUserMedia / MediaRecorder recording UI
-│   │   │   ├── FeedbackPanel.tsx # Timestamped critique display
-│   │   │   └── ScoreDisplay.tsx  # Perfect/Good/OK/Miss breakdown + aggregate score
+│   │   │   ├── FeedbackPanel.tsx  # Timestamped critique display
+│   │   │   ├── ScoreDisplay.tsx   # Perfect/Good/OK/Miss breakdown + aggregate score
+│   │   │   └── providers.tsx      # QueryClientProvider wrapper
 │   │   ├── store/
 │   │   │   └── index.ts          # Zustand store (choreography, feedback, session state)
 │   │   ├── hooks/
-│   │   │   └── useJobPoller.ts   # React Query hook for polling /api/jobs/{job_id}
+│   │   │   ├── useJobPoller.ts   # React Query hook for polling /api/jobs/{job_id}
+│   │   │   └── useRecorder.ts    # getUserMedia + MediaRecorder lifecycle hook
 │   │   ├── lib/
-│   │   │   └── api.ts            # Typed API client functions
+│   │   │   └── api.ts            # Typed API client functions (no auth)
 │   │   └── types/
 │   │       └── index.ts          # Shared TypeScript types (Keypoint, Move, Feedback, etc.)
-│   ├── AGENTS.md                 # Frontend-specific agent instructions
 │   ├── package.json
 │   └── Dockerfile
 └── docker-compose.yml
@@ -96,28 +102,33 @@ npm run build && npm run start     # Production build
 
 ### General
 - Never hardcode secrets, API keys, DB URIs, or bucket names. All config via `pydantic-settings` on the backend and environment variables on the frontend.
-- No raw video bytes in MongoDB. Store GCS/S3 URIs only.
+- No raw video bytes in MongoDB. Store GCS URIs only.
 - All heavy processing (CV pipeline, Gemini calls) runs in Celery tasks, never in FastAPI route handlers directly.
+- Exception: the `/api/choreography/generate` endpoint extracts keypoints synchronously for video uploads since this is the primary user flow and needs immediate results.
 
 ### Backend (Python)
 - Python 3.11+. Use type hints everywhere.
 - One router file per resource group (videos, jobs, choreography, feedback, users).
 - Services are plain functions or classes — no business logic in routers or tasks.
 - Tasks call services; routers enqueue tasks or call lightweight services.
-- Use `motor` (async MongoDB driver) for all DB operations in the API. Use `pymongo` (sync) in Celery tasks.
+- Use `motor` (async MongoDB driver) for all DB operations in FastAPI routes. Use `pymongo` (sync) in Celery tasks.
 - Validate all request bodies with Pydantic models. Never trust raw dicts from request payloads.
-- Auth0 JWT validation happens once in middleware (`app/main.py`), not per-route.
+- No authentication currently — all routes use `DEV_USER_ID = "dev-user"` as a hardcoded user ID. Auth0 can be re-enabled via `app/auth.py`.
 - Video upload size enforced at the FastAPI handler level (100MB max).
-- Accepted video formats: MP4, MOV, WebM — validate MIME type on upload.
+- Accepted upload formats: MP4, MOV, WebM (video) and MP3, WAV, OGG, FLAC (audio). Validate MIME type on upload.
+- All routers and tasks include structured logging via Python's `logging` module.
+- Global exception handler in `main.py` catches unhandled errors and returns consistent error JSON.
+- Request logging middleware logs method, path, and status code for every request.
 
-### Frontend (TypeScript / React)
-- TypeScript strict mode. No `any` types.
+### Frontend (TypeScript / Next.js)
+- Next.js 15 with App Router. TypeScript strict mode. No `any` types.
 - Use shadcn/ui components for all UI. Reference: https://ui.shadcn.com/blocks
 - Zustand for client-side state (current choreography, recording state, session score).
 - TanStack Query (React Query) for all server state — fetching, caching, polling.
 - Skeleton animation rendered exclusively on `<canvas>` via the `SkeletonCanvas` component.
 - In-browser recording uses `getUserMedia` + `MediaRecorder`. Do not use third-party recording libraries.
 - All API calls go through `src/lib/api.ts` — no inline `fetch` calls in components.
+- No Auth0 currently — `api.ts` sends requests without authorization headers.
 
 ---
 
@@ -143,12 +154,21 @@ For backend work, also read `backend/AGENTS.md`. For frontend work, also read `f
 |---|---|---|
 | POST | `/api/videos/upload` | Upload reference or performance video; returns `job_id` |
 | GET | `/api/jobs/{job_id}` | Poll async processing job status |
-| POST | `/api/choreography/generate` | Generate choreography for a song (accepts `difficulty`, optional `seed`) |
+| POST | `/api/choreography/generate` | Generate choreography from song or video (accepts `difficulty`, optional `seed`) |
 | POST | `/api/choreography/{id}/regenerate` | Regenerate with new sample or same seed |
 | GET | `/api/choreography/{id}/preview` | Fetch keypoint sequence for Canvas skeleton preview |
-| POST | `/api/feedback/analyze` | Submit performance video against choreography; returns score + critiques |
+| POST | `/api/feedback/analyze` | Submit performance video against choreography; returns `job_id` for async scoring |
 | GET | `/api/users/history` | Fetch user's past sessions and scores |
 | GET | `/api/health` | Health check — unauthenticated |
+
+---
+
+## Choreography Generation
+
+The `/api/choreography/generate` endpoint accepts both **video** and **audio** uploads:
+
+- **Video uploads** (MP4, MOV, WebM): Extracts real pose keypoints from the video using MediaPipe, stores them as a move in MongoDB, and creates a choreography referencing that move. The skeleton preview shows the actual poses from the uploaded dance video.
+- **Audio uploads** (MP3, WAV, etc.): Detects BPM via librosa, then samples existing moves from the MongoDB pool that match the BPM range and difficulty level.
 
 ---
 
@@ -162,9 +182,8 @@ For backend work, also read `backend/AGENTS.md`. For frontend work, also read `f
   "duration_ms": 2400,
   "bpm_range": [110, 130],
   "difficulty": "medium",
-  "genre_tags": ["hiphop"],
-  "source_video_uri": "gs://bucket/video.mp4",
-  "created_at": "ISO8601"
+  "genre_tags": ["uploaded"],
+  "source_video_uri": "gs://bucket/video.mp4"
 }
 ```
 
@@ -177,8 +196,7 @@ For backend work, also read `backend/AGENTS.md`. For frontend work, also read `f
   "difficulty": "medium",
   "seed": 42,
   "move_sequence": ["move_id_1", "move_id_2"],
-  "user_id": "auth0|...",
-  "created_at": "ISO8601"
+  "user_id": "dev-user"
 }
 ```
 
@@ -187,11 +205,10 @@ For backend work, also read `backend/AGENTS.md`. For frontend work, also read `f
 {
   "_id": "objectid",
   "choreography_id": "objectid",
-  "user_id": "auth0|...",
+  "user_id": "dev-user",
   "score": 87,
   "grade_breakdown": {"perfect": 42, "good": 18, "ok": 7, "miss": 3},
-  "critiques": [{"timestamp_ms": 14000, "text": "Left arm should be raised higher"}],
-  "created_at": "ISO8601"
+  "critiques": [{"timestamp_ms": 14000, "text": "Left arm should be raised higher"}]
 }
 ```
 
@@ -227,16 +244,21 @@ Do not send raw keypoint arrays to Gemini — convert to human-readable joint na
 All config is managed via `pydantic-settings` in `backend/app/config.py`. Required variables:
 
 ```
-MONGO_URI
-REDIS_URL
-GCS_BUCKET_NAME (or AWS_S3_BUCKET_NAME)
-GOOGLE_API_KEY           # Gemini
-AUTH0_DOMAIN
-AUTH0_AUDIENCE
+MONGO_URI                # Default: mongodb://localhost:27017
+MONGO_DB_NAME            # Default: justdance
+REDIS_URL                # Default: redis://localhost:6379/0
+GCS_PROJECT_ID           # Google Cloud project ID (required for GCS client)
+GCS_BUCKET_NAME          # GCS bucket for video/audio uploads
+GOOGLE_API_KEY           # Gemini API key
 SCORE_THRESHOLDS         # JSON: {"perfect": 0.92, "good": 0.85, "ok": 0.70}
 MAX_UPLOAD_SIZE_MB       # Default: 100
 GEMINI_DAILY_LIMIT       # Default: 10
-ALLOWED_ORIGINS          # Comma-separated list of allowed CORS origins
+ALLOWED_ORIGINS          # Comma-separated CORS origins (default: http://localhost:3000)
+```
+
+Frontend env (`frontend/.env.local`):
+```
+NEXT_PUBLIC_API_URL      # Default: http://localhost:8000
 ```
 
 ---
@@ -245,7 +267,6 @@ ALLOWED_ORIGINS          # Comma-separated list of allowed CORS origins
 
 - Max video upload: 100MB. Enforce in FastAPI `UploadFile` handler, not just client-side.
 - Accepted video formats: MP4, MOV, WebM. Validate MIME type server-side.
-- Choreography cache TTL: 1 hour in Redis, keyed by `{seed}:{difficulty}:{bpm}`.
 - No business logic in route handlers — delegate to services or enqueue Celery tasks.
 - Do not implement stretch goals (user-submitted move pool, real-time overlay, leaderboard) until core features are complete and tested.
 
@@ -257,7 +278,7 @@ All API errors must return a consistent JSON shape:
 ```json
 { "error": "Human-readable message", "code": "SNAKE_CASE_ERROR_CODE" }
 ```
-Example error codes: `UPLOAD_TOO_LARGE`, `INVALID_FORMAT`, `JOB_NOT_FOUND`, `GEMINI_LIMIT_EXCEEDED`, `UNAUTHORIZED`.
+Example error codes: `UPLOAD_TOO_LARGE`, `INVALID_FORMAT`, `JOB_NOT_FOUND`, `GEMINI_LIMIT_EXCEEDED`, `NO_POSE_DETECTED`, `BPM_DETECTION_FAILED`, `STORAGE_ERROR`, `INTERNAL_ERROR`, `NO_MATCHING_MOVES`.
 Never expose internal stack traces or raw exception messages in error responses.
 
 ---
@@ -266,8 +287,7 @@ Never expose internal stack traces or raw exception messages in error responses.
 
 - The frontend reads the backend URL from the `NEXT_PUBLIC_API_URL` environment variable.
 - Default for local dev: `http://localhost:8000`.
-- FastAPI must configure CORS middleware in `main.py` to allow `http://localhost:3000` in development and the production origin in production (read from `settings.ALLOWED_ORIGINS`).
-- Add `ALLOWED_ORIGINS` to the environment variables list in `backend/app/config.py`.
+- FastAPI configures CORS middleware in `main.py` to allow origins from `settings.ALLOWED_ORIGINS`.
 
 ---
 
@@ -287,7 +307,135 @@ Never expose internal stack traces or raw exception messages in error responses.
 Build and validate features in this order. Do not start the next phase until the current one is working end-to-end.
 
 1. **Choreography Ingestion** — video upload endpoint, CV pipeline (OpenCV + MediaPipe), move storage in MongoDB
-2. **Choreography Generation** — BPM detection, move sampling, skeleton preview on Canvas
+2. **Choreography Generation** — BPM detection, move sampling (audio) or real keypoint extraction (video), skeleton preview on Canvas
 3. **Performance Feedback** — in-browser recording, pose comparison, scoring, Gemini critiques
 
 Stretch goals (leaderboard, real-time overlay, user-submitted moves) come only after phase 3 is complete.
+
+---
+
+## Backend Agent Instructions
+
+*(From `backend/AGENTS.md`)*
+
+### Stack
+- Python 3.11+, FastAPI, Celery, Redis, MongoDB (motor async / pymongo sync)
+- OpenCV, MediaPipe — server-side pose extraction only
+- librosa — BPM and beat detection from audio and video files
+- Google GenAI SDK — Gemini feedback generation
+- pydantic-settings — all environment config
+
+### Architecture Rules
+
+**Routers:**
+- Routers validate input with Pydantic and return responses. No business logic.
+- For any operation involving video processing or Gemini: enqueue a Celery task and return a `job_id` immediately. Never block the request.
+- Exception: `/api/choreography/generate` extracts keypoints synchronously for video uploads.
+- For lightweight reads (fetch choreography, fetch history): call services directly.
+- All routes use `DEV_USER_ID = "dev-user"` — no authentication currently.
+
+**Tasks:**
+- Tasks live in `app/tasks/`. Each task downloads required assets from GCS, calls services, and writes results to MongoDB.
+- Tasks use `pymongo` (sync). Do not use `motor` inside Celery tasks.
+- Tasks update a job status document in MongoDB (`pending` → `processing` → `done` | `failed`).
+
+**Services:**
+- Services are stateless functions. No FastAPI or Celery imports inside service files.
+- `cv.py`: takes a local file path, returns a list of keypoint frame arrays. Shape: `list[list[dict]]` where each dict is `{x, y, z, visibility}`.
+- `audio.py`: detects BPM from audio or video files. Determines file type from filename/content_type and uses appropriate suffix for temp file.
+- `scoring.py`: normalizes keypoints to a unit bounding box, computes cosine similarity per frame, returns grade tier and similarity score.
+- `gemini.py`: accepts a list of `{timestamp_ms, joint_deltas: {joint_name: {expected, actual}}}` dicts, returns a list of `{timestamp_ms, text}` critique dicts. Never passes raw keypoint arrays to Gemini.
+- `storage.py`: uses `gcs.Client(project=settings.GCS_PROJECT_ID)` for GCS operations.
+
+### Pose Comparison Rules
+- Normalize keypoints to a unit bounding box before any comparison (scale/position invariant).
+- Similarity metric: cosine similarity on the flattened normalized keypoint vector.
+- Grade tiers (read from `settings.SCORE_THRESHOLDS`):
+  - Perfect ≥ 0.92, Good ≥ 0.85, OK ≥ 0.70, Miss < 0.70
+- Only send Miss and OK frames to Gemini. Skip Perfect and Good to control API cost.
+- Enforce Gemini daily limit (`settings.GEMINI_DAILY_LIMIT`, default 10) per user via a counter in Redis.
+
+### Video Upload Rules
+- Max size: `settings.MAX_UPLOAD_SIZE_MB` (default 100). Enforce in the FastAPI handler with an explicit size check before saving.
+- Accepted MIME types: `video/mp4`, `video/quicktime`, `video/webm`. Reject others with 400.
+- Save to GCS immediately on upload. Store only the URI in MongoDB — never raw bytes.
+
+### Config / Secrets
+All config via `pydantic-settings`. Required env vars:
+```
+MONGO_URI
+MONGO_DB_NAME
+REDIS_URL
+GCS_PROJECT_ID
+GCS_BUCKET_NAME
+GOOGLE_API_KEY
+SCORE_THRESHOLDS       # JSON string: {"perfect": 0.92, "good": 0.85, "ok": 0.70}
+MAX_UPLOAD_SIZE_MB     # Default: 100
+GEMINI_DAILY_LIMIT     # Default: 10
+ALLOWED_ORIGINS        # Default: http://localhost:3000
+```
+No env var may have a hardcoded default that is a real secret.
+
+---
+
+## Frontend Agent Instructions
+
+*(From `frontend/AGENTS.md`)*
+
+### Stack
+- Next.js 15, TypeScript (strict mode)
+- shadcn/ui — all UI components (https://ui.shadcn.com/blocks)
+- Zustand — client-side state
+- TanStack Query (React Query) — server state, API caching, polling
+- HTML5 Canvas API — skeleton overlay rendering
+- getUserMedia / MediaRecorder — in-browser video recording
+
+### Architecture Rules
+
+**API Calls:**
+- All API calls go through `src/lib/api.ts`. No inline `fetch` or `axios` calls in components or hooks.
+- No auth token attached — requests are sent without authorization headers.
+- API functions return typed responses matching the data models in `src/types/index.ts`.
+
+**State Management:**
+- **Zustand** (`src/store/index.ts`) owns client state: current choreography, recording state, session score, active job ID.
+- **TanStack Query** owns all server state: fetching choreography previews, polling job status, fetching feedback results, fetching user history.
+- Do not duplicate server data in Zustand. If it comes from the API, it lives in React Query's cache.
+
+**Skeleton Rendering:**
+- All skeleton animation is rendered on `<canvas>` inside `SkeletonCanvas.tsx`.
+- The component accepts a `frames: Keypoint[][]` prop (array of keypoint frames) and an `fps` prop.
+- Uses MediaPipe connection pairs to draw anatomically correct skeleton bones.
+- Use `requestAnimationFrame` for the animation loop. Do not use `setInterval`.
+- Draw bones as lines between connected joint pairs (cyan). Draw joints as filled circles (rose).
+- No third-party canvas/animation libraries — use the Canvas API directly.
+
+**Recording:**
+- `Recorder.tsx` uses `getUserMedia` to access the webcam and `MediaRecorder` to capture video.
+- On stop, produce a `Blob` in `video/webm` format and pass it up via an `onRecordingComplete(blob: Blob)` callback.
+- `useRecorder.ts` encapsulates the `getUserMedia` / `MediaRecorder` lifecycle.
+- Do not use any third-party recording libraries.
+
+**Job Polling:**
+- After any video upload, store the returned `job_id` in Zustand.
+- `useJobPoller` polls `GET /api/jobs/{job_id}` every 2 seconds using React Query's `refetchInterval`.
+- Stop polling when status is `done` or `failed`.
+
+### TypeScript Types
+All shared types in `src/types/index.ts`:
+```ts
+type Keypoint = { x: number; y: number; z: number; visibility: number }
+type Move = { id: string; keypoints: Keypoint[][]; duration_ms: number }
+type Choreography = { id: string; song_uri: string; bpm: number; difficulty: string; seed: number; move_sequence: string[] }
+type GradeTier = 'perfect' | 'good' | 'ok' | 'miss'
+type Critique = { timestamp_ms: number; text: string }
+type FeedbackResult = { id: string; choreography_id: string; score: number; grade_breakdown: Record<GradeTier, number>; critiques: Critique[] }
+type JobStatus = { job_id: string; status: 'pending' | 'processing' | 'done' | 'failed'; result_id?: string }
+type ApiError = { error: string; code: string }
+```
+
+### Styling
+- Use shadcn/ui components for all UI.
+- Dark theme as default. Game-like, energetic aesthetic.
+- Use Tailwind utility classes for layout and spacing.
+- Score display color coding: Perfect = green, Good = blue, OK = yellow, Miss = red.
