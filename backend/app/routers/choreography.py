@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from app.config import get_settings
 from app.db import choreographies_collection, moves_collection
 from app.services.audio import detect_bpm
-from app.services.choreography import assemble_sequence
+from app.services.choreography import assemble_sequence, create_synthetic_moves
 from app.services.cv import extract_keypoints, get_video_fps
 from app.services.storage import upload_bytes
 
@@ -120,13 +120,16 @@ async def generate_choreography(
         )
 
         if not move_ids:
-            logger.warning("No matching moves for BPM=%d, difficulty=%s", bpm, difficulty)
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "No moves in the pool match the detected BPM and difficulty",
-                    "code": "NO_MATCHING_MOVES",
-                },
+            logger.warning(
+                "No matching moves for BPM=%d, difficulty=%s — seeding synthetic moves",
+                bpm, difficulty,
+            )
+            await create_synthetic_moves(difficulty, moves_collection())
+            move_ids = await assemble_sequence(
+                bpm=bpm,
+                difficulty=difficulty,
+                seed=seed,
+                moves_col=moves_collection(),
             )
 
     # Store choreography
