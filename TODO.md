@@ -1,0 +1,1 @@
+Config all MCPS and plugins in IDE
