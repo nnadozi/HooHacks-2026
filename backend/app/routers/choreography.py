@@ -1,4 +1,6 @@
 import logging
+import os
+import tempfile
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, UploadFile
@@ -7,6 +9,7 @@ from app.config import get_settings
 from app.db import choreographies_collection, moves_collection
 from app.services.audio import detect_bpm
 from app.services.choreography import assemble_sequence
+from app.services.cv import extract_keypoints, get_video_fps
 from app.services.storage import upload_bytes
 
 logger = logging.getLogger("justdance.choreography")
@@ -15,15 +18,21 @@ settings = get_settings()
 
 DEV_USER_ID = "dev-user"
 
+VIDEO_MIME_TYPES = {"video/mp4", "video/quicktime", "video/webm"}
+
 
 @router.post("/generate")
 async def generate_choreography(
     file: UploadFile, difficulty: str = "medium", seed: int | None = None
 ):
     user_id = DEV_USER_ID
-    logger.info("Generate request: file=%s, difficulty=%s, seed=%s", file.filename, difficulty, seed)
+    is_video = file.content_type in VIDEO_MIME_TYPES
+    logger.info(
+        "Generate request: file=%s, type=%s, is_video=%s, difficulty=%s",
+        file.filename, file.content_type, is_video, difficulty,
+    )
 
-    # Read and upload song
+    # Read file
     contents = await file.read()
     if len(contents) > settings.max_upload_bytes:
         logger.warning("Upload too large: %d bytes", len(contents))
@@ -35,11 +44,12 @@ async def generate_choreography(
             },
         )
 
+    # Upload to storage
     try:
-        song_uri = await upload_bytes(
-            contents, file.filename or "song.mp3", file.content_type or "audio/mpeg"
+        file_uri = await upload_bytes(
+            contents, file.filename or "upload", file.content_type or "application/octet-stream"
         )
-        logger.info("Uploaded to storage: %s", song_uri)
+        logger.info("Uploaded to storage: %s", file_uri)
     except Exception as e:
         logger.error("Storage upload failed: %s", e, exc_info=True)
         raise HTTPException(
@@ -47,7 +57,7 @@ async def generate_choreography(
             detail={"error": f"Failed to upload file: {e}", "code": "STORAGE_ERROR"},
         )
 
-    # Detect BPM from audio (works with both audio and video files)
+    # Detect BPM
     try:
         bpm = detect_bpm(contents, file.filename or "", file.content_type or "")
         logger.info("Detected BPM: %d", bpm)
@@ -58,30 +68,73 @@ async def generate_choreography(
             detail={"error": f"Could not detect BPM from file: {e}", "code": "BPM_DETECTION_FAILED"},
         )
 
-    # Sample moves from pool
-    move_ids = await assemble_sequence(
-        bpm=bpm,
-        difficulty=difficulty,
-        seed=seed,
-        moves_col=moves_collection(),
-    )
+    if is_video:
+        # Extract real keypoints from the uploaded video
+        logger.info("Extracting pose keypoints from video...")
+        suffix = os.path.splitext(file.filename or ".mp4")[1] or ".mp4"
+        tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+        try:
+            tmp.write(contents)
+            tmp.flush()
+            tmp.close()
 
-    if not move_ids:
-        logger.warning("No matching moves for BPM=%d, difficulty=%s", bpm, difficulty)
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "No moves in the pool match the detected BPM and difficulty",
-                "code": "NO_MATCHING_MOVES",
-            },
+            frames = extract_keypoints(tmp.name)
+            fps = get_video_fps(tmp.name)
+        finally:
+            os.unlink(tmp.name)
+
+        if not frames:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "No pose detected in video", "code": "NO_POSE_DETECTED"},
+            )
+
+        # Filter out empty frames (frames where no person was detected)
+        frames = [f for f in frames if f]
+        logger.info("Extracted %d frames with poses at %.1f fps", len(frames), fps)
+
+        duration_ms = int((len(frames) / fps) * 1000)
+
+        # Store as a move
+        move_id = str(ObjectId())
+        move_doc = {
+            "_id": move_id,
+            "keypoints": frames,
+            "duration_ms": duration_ms,
+            "bpm_range": [max(bpm - 10, 60), bpm + 10],
+            "difficulty": difficulty,
+            "genre_tags": ["uploaded"],
+            "source_video_uri": file_uri,
+        }
+        await moves_collection().insert_one(move_doc)
+        logger.info("Stored move %s from video (%d frames, %d ms)", move_id, len(frames), duration_ms)
+
+        move_ids = [move_id]
+    else:
+        # Audio file: sample moves from existing pool
+        move_ids = await assemble_sequence(
+            bpm=bpm,
+            difficulty=difficulty,
+            seed=seed,
+            moves_col=moves_collection(),
         )
+
+        if not move_ids:
+            logger.warning("No matching moves for BPM=%d, difficulty=%s", bpm, difficulty)
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "No moves in the pool match the detected BPM and difficulty",
+                    "code": "NO_MATCHING_MOVES",
+                },
+            )
 
     # Store choreography
     choreo_id = str(ObjectId())
     actual_seed = seed if seed is not None else hash(choreo_id) & 0xFFFFFFFF
     doc = {
         "_id": choreo_id,
-        "song_uri": song_uri,
+        "song_uri": file_uri,
         "bpm": bpm,
         "difficulty": difficulty,
         "seed": actual_seed,
