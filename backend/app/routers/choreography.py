@@ -1,3 +1,5 @@
+import logging
+
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, UploadFile
 
@@ -7,6 +9,7 @@ from app.services.audio import detect_bpm
 from app.services.choreography import assemble_sequence
 from app.services.storage import upload_bytes
 
+logger = logging.getLogger("justdance.choreography")
 router = APIRouter()
 settings = get_settings()
 
@@ -18,10 +21,12 @@ async def generate_choreography(
     file: UploadFile, difficulty: str = "medium", seed: int | None = None
 ):
     user_id = DEV_USER_ID
+    logger.info("Generate request: file=%s, difficulty=%s, seed=%s", file.filename, difficulty, seed)
 
     # Read and upload song
     contents = await file.read()
     if len(contents) > settings.max_upload_bytes:
+        logger.warning("Upload too large: %d bytes", len(contents))
         raise HTTPException(
             status_code=400,
             detail={
@@ -30,12 +35,28 @@ async def generate_choreography(
             },
         )
 
-    song_uri = await upload_bytes(
-        contents, file.filename or "song.mp3", file.content_type or "audio/mpeg"
-    )
+    try:
+        song_uri = await upload_bytes(
+            contents, file.filename or "song.mp3", file.content_type or "audio/mpeg"
+        )
+        logger.info("Uploaded to storage: %s", song_uri)
+    except Exception as e:
+        logger.error("Storage upload failed: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": f"Failed to upload file: {e}", "code": "STORAGE_ERROR"},
+        )
 
     # Detect BPM from audio (works with both audio and video files)
-    bpm = detect_bpm(contents, file.filename or "", file.content_type or "")
+    try:
+        bpm = detect_bpm(contents, file.filename or "", file.content_type or "")
+        logger.info("Detected BPM: %d", bpm)
+    except Exception as e:
+        logger.error("BPM detection failed: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=400,
+            detail={"error": f"Could not detect BPM from file: {e}", "code": "BPM_DETECTION_FAILED"},
+        )
 
     # Sample moves from pool
     move_ids = await assemble_sequence(
@@ -46,6 +67,7 @@ async def generate_choreography(
     )
 
     if not move_ids:
+        logger.warning("No matching moves for BPM=%d, difficulty=%s", bpm, difficulty)
         raise HTTPException(
             status_code=400,
             detail={
@@ -67,6 +89,7 @@ async def generate_choreography(
         "user_id": user_id,
     }
     await choreographies_collection().insert_one(doc)
+    logger.info("Created choreography %s with %d moves", choreo_id, len(move_ids))
 
     return {
         "id": choreo_id,
@@ -79,8 +102,11 @@ async def generate_choreography(
 
 @router.post("/{choreo_id}/regenerate")
 async def regenerate_choreography(choreo_id: str, seed: int | None = None):
+    logger.info("Regenerate request: choreo_id=%s, seed=%s", choreo_id, seed)
+
     choreo = await choreographies_collection().find_one({"_id": choreo_id})
     if not choreo:
+        logger.warning("Choreography not found: %s", choreo_id)
         raise HTTPException(
             status_code=404,
             detail={"error": "Choreography not found", "code": "JOB_NOT_FOUND"},
@@ -98,6 +124,7 @@ async def regenerate_choreography(choreo_id: str, seed: int | None = None):
         {"_id": choreo_id},
         {"$set": {"move_sequence": move_ids, "seed": new_seed}},
     )
+    logger.info("Regenerated choreography %s with seed %d", choreo_id, new_seed)
 
     return {
         "id": choreo_id,
@@ -110,6 +137,7 @@ async def regenerate_choreography(choreo_id: str, seed: int | None = None):
 async def get_preview(choreo_id: str):
     choreo = await choreographies_collection().find_one({"_id": choreo_id})
     if not choreo:
+        logger.warning("Choreography not found for preview: %s", choreo_id)
         raise HTTPException(
             status_code=404,
             detail={"error": "Choreography not found", "code": "JOB_NOT_FOUND"},
@@ -127,6 +155,8 @@ async def get_preview(choreo_id: str):
                     "duration_ms": move["duration_ms"],
                 }
             )
+
+    logger.info("Preview for %s: %d moves loaded", choreo_id, len(moves))
 
     return {
         "id": choreo_id,

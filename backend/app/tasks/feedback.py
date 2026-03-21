@@ -1,3 +1,4 @@
+import logging
 import os
 
 from bson import ObjectId
@@ -14,6 +15,8 @@ from app.services.scoring import compare_frames
 from app.services.storage import download_to_temp
 from app.worker import celery_app
 
+logger = logging.getLogger("justdance.tasks.feedback")
+
 
 @celery_app.task(name="tasks.analyze_performance")
 def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> None:
@@ -24,11 +27,13 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
     feedback_col = sync_feedback_collection()
 
     try:
+        logger.info("Starting feedback analysis for job %s, choreo %s", job_id, choreography_id)
         jobs.update_one({"_id": job_id}, {"$set": {"status": "processing"}})
 
         # Load choreography
         choreo = choreos.find_one({"_id": choreography_id})
         if not choreo:
+            logger.error("Choreography %s not found", choreography_id)
             jobs.update_one(
                 {"_id": job_id},
                 {"$set": {"status": "failed", "error": "Choreography not found"}},
@@ -41,8 +46,10 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
             move = moves_col.find_one({"_id": move_id})
             if move:
                 reference_frames.extend(move["keypoints"])
+        logger.info("Loaded %d reference frames from %d moves", len(reference_frames), len(choreo["move_sequence"]))
 
         if not reference_frames:
+            logger.error("No reference frames found for choreo %s", choreography_id)
             jobs.update_one(
                 {"_id": job_id},
                 {"$set": {"status": "failed", "error": "No reference frames found"}},
@@ -51,14 +58,17 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
 
         # Download and process performance video
         video_path = download_to_temp(file_uri)
+        logger.info("Downloaded performance video to %s", video_path)
 
         try:
             performance_frames = extract_keypoints(video_path)
             fps = get_video_fps(video_path)
+            logger.info("Extracted %d performance frames at %.1f fps", len(performance_frames), fps)
         finally:
             os.unlink(video_path)
 
         if not performance_frames:
+            logger.warning("No pose detected in performance video for job %s", job_id)
             jobs.update_one(
                 {"_id": job_id},
                 {"$set": {"status": "failed", "error": "No pose detected in performance video"}},
@@ -69,6 +79,10 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
         frame_results, breakdown, aggregate_score = compare_frames(
             reference_frames, performance_frames, fps
         )
+        logger.info(
+            "Scoring complete: score=%d, perfect=%d, good=%d, ok=%d, miss=%d",
+            aggregate_score, breakdown["perfect"], breakdown["good"], breakdown["ok"], breakdown["miss"],
+        )
 
         # Collect frames that need Gemini critique (OK and Miss only)
         frames_for_gemini = [
@@ -78,9 +92,14 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
         # Generate critiques via Gemini (limit to avoid excessive API calls)
         critiques = []
         if frames_for_gemini:
-            # Sample up to 20 frames to keep Gemini cost manageable
             sample = frames_for_gemini[:20]
-            critiques = generate_critiques(sample)
+            logger.info("Sending %d frames to Gemini for critique", len(sample))
+            try:
+                critiques = generate_critiques(sample)
+                logger.info("Received %d critiques from Gemini", len(critiques))
+            except Exception as e:
+                logger.error("Gemini critique generation failed: %s", e, exc_info=True)
+                # Continue without critiques rather than failing the whole job
 
         # Store feedback document
         job = jobs.find_one({"_id": job_id})
@@ -94,13 +113,16 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
             "critiques": critiques,
         }
         feedback_col.insert_one(feedback_doc)
+        logger.info("Stored feedback %s with score %d", feedback_id, aggregate_score)
 
         jobs.update_one(
             {"_id": job_id},
             {"$set": {"status": "done", "result_id": feedback_id}},
         )
+        logger.info("Feedback job %s completed successfully", job_id)
 
     except Exception as e:
+        logger.error("Feedback job %s failed: %s", job_id, e, exc_info=True)
         jobs.update_one(
             {"_id": job_id},
             {"$set": {"status": "failed", "error": str(e)}},

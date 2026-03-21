@@ -1,3 +1,4 @@
+import logging
 import os
 
 from bson import ObjectId
@@ -8,6 +9,8 @@ from app.services.cv import extract_keypoints, get_video_fps
 from app.services.storage import download_to_temp
 from app.worker import celery_app
 
+logger = logging.getLogger("justdance.tasks.ingest")
+
 
 @celery_app.task(name="tasks.ingest_video")
 def ingest_video(job_id: str, file_uri: str) -> None:
@@ -16,17 +19,21 @@ def ingest_video(job_id: str, file_uri: str) -> None:
     moves = sync_moves_collection()
 
     try:
+        logger.info("Starting ingest for job %s from %s", job_id, file_uri)
         jobs.update_one({"_id": job_id}, {"$set": {"status": "processing"}})
 
         # Download video to temp file
         video_path = download_to_temp(file_uri)
+        logger.info("Downloaded video to %s", video_path)
 
         try:
             # Extract keypoints
             all_frames = extract_keypoints(video_path)
             fps = get_video_fps(video_path)
+            logger.info("Extracted %d frames at %.1f fps", len(all_frames), fps)
 
             if not all_frames:
+                logger.warning("No pose detected in video for job %s", job_id)
                 jobs.update_one(
                     {"_id": job_id},
                     {"$set": {"status": "failed", "error": "No pose detected in video"}},
@@ -37,8 +44,10 @@ def ingest_video(job_id: str, file_uri: str) -> None:
             try:
                 with open(video_path, "rb") as f:
                     audio_data = f.read()
-                bpm = detect_bpm(audio_data)
-            except Exception:
+                bpm = detect_bpm(audio_data, file_uri, "")
+                logger.info("Detected BPM: %d", bpm)
+            except Exception as e:
+                logger.warning("BPM detection failed, using default 120: %s", e)
                 bpm = 120  # default fallback
 
             # Calculate duration
@@ -56,16 +65,19 @@ def ingest_video(job_id: str, file_uri: str) -> None:
                 "source_video_uri": file_uri,
             }
             moves.insert_one(move_doc)
+            logger.info("Stored move %s (%d ms, BPM %d)", move_id, duration_ms, bpm)
 
             jobs.update_one(
                 {"_id": job_id},
                 {"$set": {"status": "done", "result_id": move_id}},
             )
+            logger.info("Ingest job %s completed successfully", job_id)
 
         finally:
             os.unlink(video_path)
 
     except Exception as e:
+        logger.error("Ingest job %s failed: %s", job_id, e, exc_info=True)
         jobs.update_one(
             {"_id": job_id},
             {"$set": {"status": "failed", "error": str(e)}},

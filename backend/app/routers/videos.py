@@ -1,3 +1,5 @@
+import logging
+
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, UploadFile
 
@@ -5,6 +7,7 @@ from app.config import get_settings
 from app.db import jobs_collection
 from app.tasks.ingest import ingest_video
 
+logger = logging.getLogger("justdance.videos")
 router = APIRouter()
 settings = get_settings()
 
@@ -15,9 +18,11 @@ ALLOWED_MIME_TYPES = {"video/mp4", "video/quicktime", "video/webm"}
 @router.post("/upload")
 async def upload_video(file: UploadFile):
     user_id = DEV_USER_ID
+    logger.info("Video upload: file=%s, type=%s", file.filename, file.content_type)
 
     # Validate MIME type
     if file.content_type not in ALLOWED_MIME_TYPES:
+        logger.warning("Rejected file type: %s", file.content_type)
         raise HTTPException(
             status_code=400,
             detail={
@@ -29,6 +34,7 @@ async def upload_video(file: UploadFile):
     # Read and validate file size
     contents = await file.read()
     if len(contents) > settings.max_upload_bytes:
+        logger.warning("Upload too large: %d bytes", len(contents))
         raise HTTPException(
             status_code=400,
             detail={
@@ -40,9 +46,17 @@ async def upload_video(file: UploadFile):
     # Upload to cloud storage
     from app.services.storage import upload_bytes
 
-    file_uri = await upload_bytes(
-        contents, file.filename or "upload.mp4", file.content_type or "video/mp4"
-    )
+    try:
+        file_uri = await upload_bytes(
+            contents, file.filename or "upload.mp4", file.content_type or "video/mp4"
+        )
+        logger.info("Uploaded to storage: %s", file_uri)
+    except Exception as e:
+        logger.error("Storage upload failed: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": f"Failed to upload file: {e}", "code": "STORAGE_ERROR"},
+        )
 
     # Create job document
     job_id = str(ObjectId())
@@ -59,5 +73,6 @@ async def upload_video(file: UploadFile):
 
     # Enqueue Celery task
     ingest_video.delay(job_id, file_uri)
+    logger.info("Enqueued ingest task for job %s", job_id)
 
     return {"job_id": job_id}
