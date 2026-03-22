@@ -98,7 +98,7 @@ export default function SkeletonCanvas({
   }, []);
 
   useEffect(() => {
-    if (!isPlaying || frames.length === 0) return;
+    if (frames.length === 0) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -106,42 +106,19 @@ export default function SkeletonCanvas({
     if (!ctx) return;
 
     const frameDuration = 1000 / fps;
-    frameIndexRef.current = 0;
     lastTimeRef.current = 0;
 
-    let animId: number;
+    let animId: number | null = null;
 
-    const draw = (timestamp: number) => {
+    const drawFrame = (frameIndex: number) => {
       const { cssW, cssH, dpr } = sizeRef.current;
       // Draw in CSS pixels for easier fit calculations.
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      if (videoElement && videoElement.duration && isFinite(videoElement.duration)) {
-        // Sync frame index to video currentTime
-        const progress = videoElement.currentTime / videoElement.duration;
-        frameIndexRef.current = Math.min(
-          Math.floor(progress * frames.length),
-          frames.length - 1
-        );
-        onFrameChange?.(frameIndexRef.current);
-      } else {
-        // Fallback: independent timer when no video element
-        if (!lastTimeRef.current) lastTimeRef.current = timestamp;
-        const elapsed = timestamp - lastTimeRef.current;
-
-        if (elapsed >= frameDuration) {
-          lastTimeRef.current = timestamp;
-          frameIndexRef.current =
-            (frameIndexRef.current + 1) % frames.length;
-          onFrameChange?.(frameIndexRef.current);
-        }
-      }
-
-      const frame = frames[frameIndexRef.current];
+      const frame = frames[frameIndex];
       ctx.clearRect(0, 0, cssW, cssH);
 
       if (!frame || frame.length === 0) {
-        animId = requestAnimationFrame(draw);
         return;
       }
 
@@ -195,11 +172,73 @@ export default function SkeletonCanvas({
       if (overlay) {
         ctx.shadowBlur = 0;
       }
-      animId = requestAnimationFrame(draw);
     };
 
-    animId = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(animId);
+    const computeFrameIndexFromVideo = () => {
+      if (!videoElement || !videoElement.duration || !isFinite(videoElement.duration)) return 0;
+      const progress = videoElement.currentTime / videoElement.duration;
+      return Math.min(Math.floor(progress * frames.length), frames.length - 1);
+    };
+
+    const render = (frameIndex: number) => {
+      frameIndexRef.current = frameIndex;
+      onFrameChange?.(frameIndex);
+      drawFrame(frameIndex);
+    };
+
+    const loop = (timestamp: number) => {
+      if (videoElement) {
+        // Smooth when playing; event handlers cover paused/seek cases.
+        if (isPlaying) {
+          render(computeFrameIndexFromVideo());
+          animId = requestAnimationFrame(loop);
+        }
+        return;
+      }
+
+      if (!isPlaying) return;
+      if (!lastTimeRef.current) lastTimeRef.current = timestamp;
+      const elapsed = timestamp - lastTimeRef.current;
+      if (elapsed >= frameDuration) {
+        lastTimeRef.current = timestamp;
+        const nextIndex = (frameIndexRef.current + 1) % frames.length;
+        render(nextIndex);
+      }
+      animId = requestAnimationFrame(loop);
+    };
+
+    // Initial render (first frame or current video time).
+    render(videoElement ? computeFrameIndexFromVideo() : 0);
+
+    const handleVideoUpdate = () => {
+      render(computeFrameIndexFromVideo());
+    };
+
+    if (videoElement) {
+      videoElement.addEventListener("timeupdate", handleVideoUpdate);
+      videoElement.addEventListener("seeked", handleVideoUpdate);
+      videoElement.addEventListener("loadedmetadata", handleVideoUpdate);
+      // Kick off an animation loop only while playing for smoothness.
+      if (isPlaying) animId = requestAnimationFrame(loop);
+
+      return () => {
+        videoElement.removeEventListener("timeupdate", handleVideoUpdate);
+        videoElement.removeEventListener("seeked", handleVideoUpdate);
+        videoElement.removeEventListener("loadedmetadata", handleVideoUpdate);
+        if (animId !== null) cancelAnimationFrame(animId);
+      };
+    }
+
+    if (isPlaying) {
+      // Start animation for skeleton-only playback.
+      animId = requestAnimationFrame(loop);
+      return () => {
+        if (animId !== null) cancelAnimationFrame(animId);
+      };
+    }
+
+    // Not playing and no video: keep the initial frame drawn.
+    return;
   }, [frames, fps, isPlaying, width, height, overlay, onFrameChange, videoElement, fitMode]);
 
   return (

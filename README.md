@@ -75,6 +75,8 @@ GOOGLE_API_KEY=<your-gemini-api-key>
 SCORE_THRESHOLDS={"perfect": 0.92, "good": 0.85, "ok": 0.70}
 MAX_UPLOAD_SIZE_MB=100
 GEMINI_DAILY_LIMIT=10
+GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_MODEL_FALLBACKS=gemini-2.5-flash,gemini-2.0-flash
 ALLOWED_ORIGINS=http://localhost:3000
 ```
 

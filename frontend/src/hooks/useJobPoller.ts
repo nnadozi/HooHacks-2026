@@ -21,7 +21,7 @@ export function useJobPoller({ jobId, onComplete }: UseJobPollerOptions) {
         }
         return false;
       }
-      return 2000;
+      return 1000;
     },
   });
 }

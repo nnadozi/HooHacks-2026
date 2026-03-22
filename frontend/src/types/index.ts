@@ -66,6 +66,20 @@ export type FeedbackResult = {
   created_at?: string;
 };
 
+export type SessionHistoryRow = {
+  id: string;
+  choreography_id: string;
+  bpm?: number | null;
+  difficulty?: "easy" | "medium" | "hard" | null;
+  song_uri?: string | null;
+  performance_uri?: string | null;
+  feedback_id?: string | null;
+  score?: number | null;
+  grade_breakdown?: GradeBreakdown | null;
+  critiques?: Critique[] | null;
+  created_at?: string;
+};
+
 export type JobStatus = {
   job_id: string;
   status: "pending" | "processing" | "done" | "failed";

@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getUserHistory } from "@/lib/api";
-import type { FeedbackResult } from "@/types";
+import type { SessionHistoryRow } from "@/types";
 import { cn } from "@/lib/utils";
 
 type SongListProps = {
@@ -35,15 +35,21 @@ function formatWhen(iso?: string): string {
   });
 }
 
-function feedbackToSession(f: FeedbackResult, index: number): SessionRow {
-  const when = formatWhen(f.created_at);
+function historyToSession(row: SessionHistoryRow, index: number): SessionRow {
+  const when = formatWhen(row.created_at);
+  const score = row.score ?? null;
+  const difficulty = row.difficulty ?? null;
   return {
-    id: f.id,
-    choreographyId: f.choreography_id,
+    id: row.id,
+    choreographyId: row.choreography_id,
     title: `Session ${index + 1}`,
-    line2: when ? `${when} · Score ${f.score}` : `Score ${f.score}`,
-    bpm: null,
-    tags: [`${f.score} pts`],
+    line2: score != null
+      ? (when ? `${when} · Score ${score}` : `Score ${score}`)
+      : (when ? `${when} · Not performed` : "Not performed"),
+    bpm: row.bpm ?? null,
+    tags: score != null
+      ? [`${score} pts`, difficulty ?? ""].filter(Boolean)
+      : [difficulty ?? "", "No performance"].filter(Boolean),
   };
 }
 
@@ -61,8 +67,8 @@ export default function SongList({
     queryKey: ["user-history"],
     queryFn: getUserHistory,
     // Keep "Recent" in sync with the DB while the user is on the landing page.
-    refetchOnWindowFocus: activeTab === "recent",
-    refetchOnMount: activeTab === "recent" ? "always" : false,
+    refetchOnWindowFocus: true,
+    refetchOnMount: "always",
     refetchInterval: activeTab === "recent" ? 5_000 : false,
     refetchIntervalInBackground: false,
   });
@@ -75,7 +81,7 @@ export default function SongList({
         const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
         return tb - ta;
       })
-      .map((f, i) => feedbackToSession(f, i));
+      .map((row, i) => historyToSession(row, i));
   }, [data?.history]);
 
   const filtered = useMemo(() => {

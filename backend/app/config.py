@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 100
     GEMINI_DAILY_LIMIT: int = 10
 
+    # Gemini
+    # Use a Flash/Flash-Lite tier model for lower latency feedback generation.
+    GEMINI_MODEL: str = "gemini-2.5-flash-lite"
+    # Comma-separated list (or JSON array) of fallback model IDs to try if GEMINI_MODEL is unavailable.
+    GEMINI_MODEL_FALLBACKS: str = "gemini-2.5-flash,gemini-2.0-flash"
+
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:3000"
 
@@ -41,6 +47,15 @@ class Settings(BaseSettings):
     FFMPEG_PATH: str = Field(
         default="ffmpeg",
         validation_alias=AliasChoices("FFMPEG_PATH", "ffmpeg_path"),
+    )
+
+    # MediaPipe
+    # If empty, the backend will use `backend/models/pose_landmarker_lite.task` and
+    # attempt to download it automatically when first needed.
+    MEDIAPIPE_POSE_MODEL_PATH: str = ""
+    MEDIAPIPE_POSE_MODEL_URL: str = (
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
+        "pose_landmarker_lite/float16/latest/pose_landmarker_lite.task"
     )
 
     @property

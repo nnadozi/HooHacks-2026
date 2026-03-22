@@ -132,6 +132,8 @@ GOOGLE_API_KEY         # Gemini API key (required)
 SCORE_THRESHOLDS       # JSON string: {"perfect": 0.92, "good": 0.85, "ok": 0.70}
 MAX_UPLOAD_SIZE_MB     # Default: 100
 GEMINI_DAILY_LIMIT     # Default: 10
+GEMINI_MODEL           # Default: gemini-2.5-flash-lite (Flash/Flash-Lite recommended for lower latency)
+GEMINI_MODEL_FALLBACKS # Default: gemini-2.5-flash,gemini-2.0-flash (comma-separated or JSON array)
 ALLOWED_ORIGINS        # Default: http://localhost:3000
 ```
 No env var may have a hardcoded default that is a real secret.

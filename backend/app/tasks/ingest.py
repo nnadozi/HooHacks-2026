@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import datetime
 
 from bson import ObjectId
 
@@ -30,7 +31,12 @@ def ingest_video(job_id: str, file_uri: str) -> None:
 
         try:
             # Extract keypoints
-            all_frames = extract_keypoints(video_path, ffmpeg_path=settings.FFMPEG_PATH)
+            all_frames = extract_keypoints(
+                video_path,
+                ffmpeg_path=settings.FFMPEG_PATH,
+                model_path=settings.MEDIAPIPE_POSE_MODEL_PATH or None,
+                model_url=settings.MEDIAPIPE_POSE_MODEL_URL or None,
+            )
             fps = get_video_fps(video_path, ffmpeg_path=settings.FFMPEG_PATH)
             logger.info("Extracted %d frames at %.1f fps", len(all_frames), fps)
 
@@ -65,6 +71,7 @@ def ingest_video(job_id: str, file_uri: str) -> None:
                 "difficulty": "medium",
                 "genre_tags": [],
                 "source_video_uri": file_uri,
+                "created_at": datetime.utcnow(),
             }
             moves.insert_one(move_doc)
             logger.info("Stored move %s (%d ms, BPM %d)", move_id, duration_ms, bpm)

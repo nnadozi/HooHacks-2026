@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import SongList from "@/components/SongList";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -27,6 +28,7 @@ function scrollSessionsIntoView(el: HTMLElement | null) {
 
 export default function HomePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">(
     "medium"
@@ -62,6 +64,7 @@ export default function HomePage() {
 
     try {
       const result = await generateChoreography(file, difficulty, null);
+      queryClient.invalidateQueries({ queryKey: ["user-history"] });
       router.push(`/choreography/${result.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed");

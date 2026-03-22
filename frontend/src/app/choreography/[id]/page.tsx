@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Recorder from "@/components/Recorder";
 import SkeletonCanvas from "@/components/SkeletonCanvas";
+import StickFigure3D from "@/components/StickFigure3D";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,6 +27,7 @@ import {
 import {
   analyzeFeedback,
   getChoreographyPreview,
+  getVideoServeUrl,
   regenerateChoreography,
 } from "@/lib/api";
 import type { Keypoint } from "@/types";
@@ -35,12 +37,19 @@ const COUNTDOWN_SECONDS = 5;
 
 type PageMode = "preview" | "countdown" | "recording" | "submitting";
 
+function isVideoUri(uri: string): boolean {
+  return /\.(mp4|m4v|mov|webm)(\?|#|$)/i.test(uri);
+}
+
 export default function ChoreographyPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modelPanelRef = useRef<HTMLDivElement>(null);
   const [panelSize, setPanelSize] = useState({ width: 640, height: 480 });
+  const previewPanelRef = useRef<HTMLDivElement>(null);
+  const [previewPanelSize, setPreviewPanelSize] = useState({ width: 960, height: 540 });
+  const [referenceVideoElement, setReferenceVideoElement] = useState<HTMLVideoElement | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -60,6 +69,30 @@ export default function ChoreographyPage() {
   const allFrames: Keypoint[][] =
     preview?.moves.flatMap((m) => m.keypoints) || [];
 
+  const referenceVideoUrl = useMemo(() => {
+    if (!preview) return null;
+    if (preview.song_uri && isVideoUri(preview.song_uri)) {
+      return getVideoServeUrl(preview.song_uri);
+    }
+    return null;
+  }, [preview]);
+
+  const hasReferenceVideo = Boolean(referenceVideoUrl);
+
+  useEffect(() => {
+    const v = referenceVideoElement;
+    if (!v) return;
+    v.muted = true;
+    v.loop = true;
+    if (isPlaying) {
+      void v.play().catch(() => {
+        // Ignore autoplay / gesture failures; Play button can be pressed again.
+      });
+    } else {
+      v.pause();
+    }
+  }, [isPlaying, referenceVideoElement, referenceVideoUrl]);
+
   // Calculate total duration from preview data
   const totalDurationMs = useMemo(() => {
     if (!preview?.moves) return 0;
@@ -77,6 +110,20 @@ export default function ChoreographyPage() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [mode]);
+
+  // Track preview panel size (for larger routine window in preview mode)
+  useEffect(() => {
+    const el = previewPanelRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) {
+        setPreviewPanelSize({ width: Math.round(width), height: Math.round(height) });
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [preview]);
 
   // Auto-stop recording after choreography duration
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -168,7 +215,7 @@ export default function ChoreographyPage() {
   if (isLoading) {
     return (
       <main className="min-h-[calc(100vh-3.5rem)] bg-background px-4 py-8 sm:py-10">
-        <div className="mx-auto flex max-w-4xl flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-none flex-col gap-6 md:max-w-[75vw]">
           <div className="space-y-2">
             <Skeleton className="h-8 w-48" />
             <Skeleton className="h-4 w-full max-w-md" />
@@ -179,7 +226,7 @@ export default function ChoreographyPage() {
               <Skeleton className="h-4 w-64" />
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-4">
-              <Skeleton className="aspect-[4/3] w-full max-w-[640px] rounded-lg" />
+              <Skeleton className="h-[min(55vh,44rem)] w-full rounded-lg" />
               <div className="flex gap-2">
                 <Skeleton className="h-9 w-20" />
                 <Skeleton className="h-9 w-24" />
@@ -241,14 +288,38 @@ export default function ChoreographyPage() {
           <div className="flex flex-1 flex-col gap-1">
             <h3 className="px-2 text-xs font-medium text-muted-foreground">Follow Along</h3>
             <div ref={modelPanelRef} className="relative flex-1 overflow-hidden rounded-lg border border-border">
-              <StickFigure3D
-                frames={allFrames}
-                fps={30}
-                isPlaying={isPlaying}
-                width={panelSize.width}
-                height={panelSize.height}
-                className="h-full w-full rounded-lg"
-              />
+              {hasReferenceVideo ? (
+                <>
+                  <video
+                    ref={setReferenceVideoElement}
+                    src={referenceVideoUrl ?? undefined}
+                    playsInline
+                    className="absolute inset-0 h-full w-full rounded-lg object-contain"
+                  />
+                  <div className="pointer-events-none absolute inset-0">
+                    <SkeletonCanvas
+                      frames={allFrames}
+                      fps={30}
+                      isPlaying={isPlaying}
+                      overlay
+                      fitMode="contain"
+                      videoElement={referenceVideoElement}
+                      width={panelSize.width}
+                      height={panelSize.height}
+                      className="h-full w-full rounded-lg"
+                    />
+                  </div>
+                </>
+              ) : (
+                <StickFigure3D
+                  frames={allFrames}
+                  fps={30}
+                  isPlaying={isPlaying}
+                  width={panelSize.width}
+                  height={panelSize.height}
+                  className="h-full w-full rounded-lg"
+                />
+              )}
 
               {/* Countdown overlay */}
               {mode === "countdown" && (
@@ -295,7 +366,7 @@ export default function ChoreographyPage() {
 
   return (
     <main className="min-h-[calc(100vh-3.5rem)] bg-background px-4 py-8 sm:px-8 sm:py-10">
-      <div className="mx-auto flex max-w-4xl flex-col gap-8">
+      <div className="mx-auto flex w-full max-w-none flex-col gap-8 md:max-w-[75vw]">
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
             Preview
@@ -316,13 +387,47 @@ export default function ChoreographyPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-6">
-              <StickFigure3D
-                frames={allFrames}
-                fps={30}
-                isPlaying={isPlaying}
-                width={640}
-                height={480}
-              />
+              {hasReferenceVideo ? (
+                <div
+                  ref={previewPanelRef}
+                  className="relative h-[min(55vh,44rem)] w-full overflow-hidden rounded-xl border border-border bg-black"
+                >
+                  <video
+                    ref={setReferenceVideoElement}
+                    src={referenceVideoUrl ?? undefined}
+                    playsInline
+                    className="absolute inset-0 h-full w-full object-contain"
+                  />
+                  <div className="pointer-events-none absolute inset-0">
+                    <SkeletonCanvas
+                      frames={allFrames}
+                      fps={30}
+                      isPlaying={isPlaying}
+                      overlay
+                      fitMode="contain"
+                      videoElement={referenceVideoElement}
+                      width={previewPanelSize.width}
+                      height={previewPanelSize.height}
+                      className="h-full w-full rounded-none border-0 bg-transparent shadow-none"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div
+                  ref={previewPanelRef}
+                  className="w-full overflow-hidden rounded-xl border border-border bg-black"
+                  style={{ height: "min(55vh, 44rem)" }}
+                >
+                  <StickFigure3D
+                    frames={allFrames}
+                    fps={30}
+                    isPlaying={isPlaying}
+                    width={previewPanelSize.width}
+                    height={previewPanelSize.height}
+                    className="h-full w-full"
+                  />
+                </div>
+              )}
 
               <Separator className="max-w-md" />
 

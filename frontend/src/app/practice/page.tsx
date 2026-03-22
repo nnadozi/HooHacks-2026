@@ -135,7 +135,7 @@ export default function PracticePage() {
                                 {row.choreography_id}
                               </span>
                               <span className="shrink-0 text-xs text-muted-foreground">
-                                {row.score} pts
+                                {row.score != null ? `${row.score} pts` : "—"}
                               </span>
                             </Button>
                           ))}
