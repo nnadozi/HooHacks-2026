@@ -18,6 +18,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   analyzeFeedback,
   getChoreographyPreview,
   regenerateChoreography,
@@ -320,60 +326,103 @@ export default function ChoreographyPage() {
 
               <Separator className="max-w-md" />
 
-              <div className="flex w-full flex-wrap items-center justify-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsPlaying(!isPlaying)}
-                >
-                  {isPlaying ? "Pause" : "Play"}
-                </Button>
+              <TooltipProvider>
+                <div className="flex w-full flex-wrap items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsPlaying(!isPlaying)}
+                  >
+                    {isPlaying ? "Pause" : "Play"}
+                  </Button>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isRegenerating}
-                  className="gap-2"
-                  onClick={handleRegenerate}
-                >
-                  {isRegenerating ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      Regenerating…
-                    </>
-                  ) : (
-                    "Regenerate"
-                  )}
-                </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isRegenerating}
+                    className="gap-2"
+                    onClick={handleRegenerate}
+                  >
+                    {isRegenerating ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Regenerating…
+                      </>
+                    ) : (
+                      "Regenerate"
+                    )}
+                  </Button>
 
-                <Button
-                  type="button"
-                  size="lg"
-                  onClick={() => {
-                    setIsPlaying(false);
-                    startCountdown();
-                  }}
-                >
-                  Record
-                </Button>
+                  <Tooltip>
+                    <TooltipTrigger
+                      delay={150}
+                      render={
+                        <Button
+                          type="button"
+                          size="lg"
+                          onClick={() => {
+                            setIsPlaying(false);
+                            startCountdown();
+                          }}
+                        >
+                          Record
+                        </Button>
+                      }
+                    />
+                    <TooltipContent>
+                      Record your performance with the webcam, then get feedback
+                      on how closely you matched this choreography.
+                    </TooltipContent>
+                  </Tooltip>
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept={ACCEPTED_VIDEO_TYPES}
-                  onChange={handleUploadVideo}
-                  className="hidden"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="lg"
-                  disabled={isUploading}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {isUploading ? "Uploading…" : "Upload video"}
-                </Button>
-              </div>
+                  <Tooltip>
+                    <TooltipTrigger
+                      delay={150}
+                      render={
+                        <Button
+                          type="button"
+                          size="lg"
+                          onClick={() => router.push(`/practice/choreography/${id}`)}
+                        >
+                          Practice
+                        </Button>
+                      }
+                    />
+                    <TooltipContent>
+                      Practice mode opens the reference player + your live camera
+                      skeleton with an accuracy bar so you can drill the routine.
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger
+                      delay={150}
+                      render={
+                        <Button
+                          type="button"
+                          size="lg"
+                          disabled={isUploading}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          {isUploading ? "Uploading…" : "Upload video"}
+                        </Button>
+                      }
+                    />
+                    <TooltipContent>
+                      Upload an existing performance video file to score it
+                      against this choreography.
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={ACCEPTED_VIDEO_TYPES}
+                    onChange={handleUploadVideo}
+                    className="hidden"
+                  />
+                </div>
+              </TooltipProvider>
             </CardContent>
           </Card>
         )}
