@@ -1,13 +1,23 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { generateChoreography } from "@/lib/api";
-
 import SongList from "@/components/SongList";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { generateChoreography } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 export default function HomePage() {
   const router = useRouter();
@@ -28,8 +38,7 @@ export default function HomePage() {
     if (droppedFile) setFile(droppedFile);
   }, []);
 
-  const handleSelectMap = (tab: "public" | "recent") => {
-    setActiveTab(tab);
+  const scrollToSessions = () => {
     songListRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
@@ -50,26 +59,34 @@ export default function HomePage() {
   };
 
   return (
-    <main className="h-screen w-full overflow-y-auto snap-y snap-mandatory scroll-smooth bg-black overflow-x-hidden">
-      {/* Top section: Main content */}
-      <div className="flex flex-col items-center justify-center h-screen w-full shrink-0 snap-start p-6">
-        <div className="text-center">
-          <h1 className="text-5xl font-bold tracking-tight text-white mb-6">
-            JustDance <span className="text-cyan-400">AI</span>
+    <main className="h-screen w-full snap-y snap-mandatory overflow-x-hidden overflow-y-auto scroll-smooth">
+      <div className="flex h-screen w-full shrink-0 snap-start flex-col items-center justify-center p-6">
+        <div className="mb-10 max-w-md text-center">
+          <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+            New choreography
           </h1>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
+            Upload audio or video. Preview the skeleton, record your run, get a score
+            and short notes.
+          </p>
         </div>
 
-        <Card className="w-full max-w-lg border-zinc-700 bg-zinc-900 text-white shadow-2xl">
-          <CardHeader>
-            <CardTitle>Upload a Song</CardTitle>
+        <Card className="w-full max-w-lg border-border shadow-sm">
+          <CardHeader className="space-y-1">
+            <CardTitle>File</CardTitle>
+            <CardDescription>
+              Audio (common formats) or video (MP4, MOV, WebM).
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Drop zone */}
             <div
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
               onClick={() => fileInputRef.current?.click()}
-              className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-600 p-8 transition hover:border-cyan-500 hover:bg-zinc-800/50"
+              className={cn(
+                "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted/40 p-9 transition-colors",
+                "hover:border-primary/40 hover:bg-muted/60"
+              )}
             >
               <input
                 ref={fileInputRef}
@@ -79,42 +96,68 @@ export default function HomePage() {
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
               />
               {file ? (
-                <p className="text-sm text-zinc-300">{file.name}</p>
+                <p className="text-center text-sm font-medium text-foreground">
+                  {file.name}
+                </p>
               ) : (
-                <p className="text-sm text-zinc-500">
-                  Drop a song or video here or click to browse
+                <p className="text-center text-sm text-muted-foreground">
+                  Drop a file here or click to choose
                 </p>
               )}
             </div>
 
-            {/* Difficulty selector */}
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-zinc-400">Difficulty:</span>
-              {(["easy", "medium", "hard"] as const).map((level) => (
-                <button
-                  key={level}
-                  onClick={() => setDifficulty(level)}
-                  className={`rounded-md px-3 py-1 text-sm capitalize transition ${difficulty === level
-                      ? "bg-cyan-600 text-white"
-                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                    }`}
-                >
-                  {level}
-                </button>
-              ))}
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Difficulty</Label>
+              <ToggleGroup
+                value={[difficulty]}
+                onValueChange={(next) => {
+                  const v = next[0];
+                  if (v === "easy" || v === "medium" || v === "hard") {
+                    setDifficulty(v);
+                  }
+                }}
+                variant="outline"
+                spacing={0}
+                className="w-full justify-stretch"
+              >
+                {(["easy", "medium", "hard"] as const).map((level) => (
+                  <ToggleGroupItem
+                    key={level}
+                    value={level}
+                    className="flex-1 capitalize"
+                  >
+                    {level}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
             </div>
 
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {error && (
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            )}
 
             <Button
               onClick={handleGenerate}
               disabled={!file || isLoading}
-              className="w-full bg-white text-black hover:bg-zinc-200"
+              className="w-full"
               size="lg"
             >
-              {isLoading ? "Generating..." : "Generate Choreography"}
+              {isLoading ? "Generating…" : "Generate"}
             </Button>
 
+            <Separator />
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full gap-1 text-muted-foreground hover:text-foreground"
+              onClick={scrollToSessions}
+            >
+              Sessions
+              <ChevronDown className="size-4" />
+            </Button>
             <Button
               onClick={() => router.push("/editor")}
               variant="outline"
@@ -145,10 +188,9 @@ export default function HomePage() {
         </Card>
       </div>
 
-      {/* Bottom section: Song List bounded on the left */}
-      <div 
+      <div
         ref={songListRef}
-        className="h-screen w-full flex flex-col justify-center items-start px-12 shrink-0 snap-start overflow-hidden p-6"
+        className="flex h-screen w-full shrink-0 snap-start flex-col justify-center overflow-hidden p-6 sm:px-10"
       >
         <SongList activeTab={activeTab} onTabChange={setActiveTab} />
       </div>

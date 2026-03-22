@@ -8,7 +8,7 @@ pydantic-settings==2.5.2
 python-jose[cryptography]==3.3.0
 httpx
 opencv-python-headless==4.10.0.84
-mediapipe==0.10.18
+mediapipe==0.10.33
 librosa==0.10.2
 google-genai
 python-multipart==0.0.12

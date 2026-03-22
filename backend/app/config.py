@@ -42,7 +42,9 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> list[str]:
-        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]
+        # Empty ALLOWED_ORIGINS in .env becomes "" and would yield [""], which matches no browser Origin.
+        origins = [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        return origins if origins else ["http://localhost:3000"]
 
     @property
     def max_upload_bytes(self) -> int:

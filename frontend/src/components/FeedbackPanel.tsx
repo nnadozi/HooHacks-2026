@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import type { Critique } from "@/types";
 
 interface FeedbackPanelProps {
@@ -19,9 +20,9 @@ function formatTimestamp(ms: number): string {
 export default function FeedbackPanel({ critiques }: FeedbackPanelProps) {
   if (critiques.length === 0) {
     return (
-      <Card className="border-zinc-700 bg-zinc-900">
-        <CardContent className="pt-6">
-          <p className="text-zinc-400">No critiques — great performance!</p>
+      <Card className="border-border shadow-sm">
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          No notes for this run.
         </CardContent>
       </Card>
     );
@@ -30,18 +31,21 @@ export default function FeedbackPanel({ critiques }: FeedbackPanelProps) {
   const ordered = [...critiques].sort((a, b) => a.timestamp_ms - b.timestamp_ms);
 
   return (
-    <Card className="border-zinc-700 bg-zinc-900">
-      <CardHeader>
-        <CardTitle className="text-lg">Feedback</CardTitle>
+    <Card className="border-border shadow-sm">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base font-medium">Notes</CardTitle>
       </CardHeader>
       <CardContent>
-        <ul className="space-y-3">
-          {ordered.map((critique) => (
-            <li key={`${critique.timestamp_ms}-${critique.text}`} className="flex gap-3 text-sm">
-              <span className="shrink-0 font-mono text-cyan-400">
-                {formatTimestamp(critique.timestamp_ms)}
-              </span>
-              <span className="text-zinc-300">{critique.text}</span>
+        <ul className="space-y-0">
+          {ordered.map((critique, i) => (
+            <li key={`${critique.timestamp_ms}-${critique.text}`}>
+              {i > 0 && <Separator className="my-3" />}
+              <div className="flex gap-3 text-sm leading-relaxed">
+                <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+                  {formatTimestamp(critique.timestamp_ms)}
+                </span>
+                <span>{critique.text}</span>
+              </div>
             </li>
           ))}
         </ul>

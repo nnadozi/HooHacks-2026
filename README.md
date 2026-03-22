@@ -85,6 +85,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
 ```
+python -m celery -A app.worker worker --loglevel=info
 
 ### 5. Frontend
 

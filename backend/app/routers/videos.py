@@ -1,13 +1,10 @@
 import logging
-import os
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, UploadFile
-from fastapi.responses import FileResponse
 
 from app.config import get_settings
 from app.db import jobs_collection
-from app.services.storage import download_to_temp
 from app.tasks.ingest import ingest_video
 
 logger = logging.getLogger("justdance.videos")
@@ -46,17 +43,12 @@ async def upload_video(file: UploadFile):
             },
         )
 
-    # Ensure filename has proper extension for codec detection
-    filename = file.filename or "upload"
-    mime_to_ext = {"video/webm": ".webm", "video/mp4": ".mp4", "video/quicktime": ".mov"}
-    ext = mime_to_ext.get(file.content_type or "", ".mp4")
-    if not any(filename.endswith(e) for e in mime_to_ext.values()):
-        filename = filename + ext
-
     # Upload to cloud storage
+    from app.services.storage import upload_bytes
+
     try:
         file_uri = await upload_bytes(
-            contents, filename, file.content_type or "video/mp4"
+            contents, file.filename or "upload.mp4", file.content_type or "video/mp4"
         )
         logger.info("Uploaded to storage: %s", file_uri)
     except Exception as e:
@@ -84,29 +76,3 @@ async def upload_video(file: UploadFile):
     logger.info("Enqueued ingest task for job %s", job_id)
 
     return {"job_id": job_id}
-
-
-@router.get("/serve")
-async def serve_video(uri: str):
-    """Proxy a GCS video to the browser. Accepts a gs:// URI as query param."""
-    if not uri.startswith("gs://"):
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Invalid URI format", "code": "INVALID_FORMAT"},
-        )
-
-    try:
-        local_path = download_to_temp(uri)
-    except Exception as e:
-        logger.error("Failed to download video %s: %s", uri, e)
-        raise HTTPException(
-            status_code=404,
-            detail={"error": "Video not found", "code": "JOB_NOT_FOUND"},
-        )
-
-    # Determine media type from extension
-    ext = os.path.splitext(local_path)[1].lower()
-    media_types = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm"}
-    media_type = media_types.get(ext, "video/mp4")
-
-    return FileResponse(local_path, media_type=media_type)

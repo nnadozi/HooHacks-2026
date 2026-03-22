@@ -71,8 +71,8 @@ export default function SkeletonCanvas({
         return;
       }
 
-      // Draw bones
-      ctx.strokeStyle = "#22d3ee"; // cyan
+      // Bones: sky blue (matches app primary)
+      ctx.strokeStyle = "#38bdf8";
       ctx.lineWidth = 3;
       for (const [a, b] of CONNECTIONS) {
         if (a >= frame.length || b >= frame.length) continue;
@@ -86,8 +86,8 @@ export default function SkeletonCanvas({
         ctx.stroke();
       }
 
-      // Draw joints
-      ctx.fillStyle = "#f43f5e"; // rose
+      // Joints: rose accent for contrast on sky bones
+      ctx.fillStyle = "#f472b6";
       for (const kp of frame) {
         if (kp.visibility < 0.5) continue;
         ctx.beginPath();
@@ -107,7 +107,7 @@ export default function SkeletonCanvas({
       ref={canvasRef}
       width={width}
       height={height}
-      className="rounded-lg border border-zinc-700 bg-zinc-900"
+      className="rounded-xl border border-border bg-card/80 shadow-inner"
     />
   );
 }
