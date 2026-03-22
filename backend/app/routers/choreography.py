@@ -10,6 +10,7 @@ from app.db import choreographies_collection, moves_collection
 from app.services.audio import detect_bpm
 from app.services.choreography import assemble_sequence, create_synthetic_moves
 from app.services.cv import extract_keypoints, get_video_fps
+from app.services.scoring import normalize_keypoints, cosine_similarity
 from app.services.storage import upload_bytes
 
 logger = logging.getLogger("justdance.choreography")
@@ -93,21 +94,62 @@ async def generate_choreography(
         frames = [f for f in frames if f]
         logger.info("Extracted %d frames with poses at %.1f fps", len(frames), fps)
 
-        duration_ms = int((len(frames) / fps) * 1000)
+        # Check for duplicate videos in the database (>=98% similarity reuses existing move)
+        DUPLICATE_THRESHOLD = 0.95
+        SAMPLE_COUNT = 10
+        sample_indices = [
+            int(i * len(frames) / SAMPLE_COUNT) for i in range(SAMPLE_COUNT)
+        ] if len(frames) >= SAMPLE_COUNT else list(range(len(frames)))
+        sample_frames = [frames[i] for i in sample_indices]
 
-        # Store as a move
-        move_id = str(ObjectId())
-        move_doc = {
-            "_id": move_id,
-            "keypoints": frames,
-            "duration_ms": duration_ms,
-            "bpm_range": [max(bpm - 10, 60), bpm + 10],
-            "difficulty": difficulty,
-            "genre_tags": ["uploaded"],
-            "source_video_uri": file_uri,
-        }
-        await moves_collection().insert_one(move_doc)
-        logger.info("Stored move %s from video (%d frames, %d ms)", move_id, len(frames), duration_ms)
+        duplicate_move_id = None
+        existing_moves = await moves_collection().find().to_list(length=None)
+        for existing in existing_moves:
+            ex_kps = existing.get("keypoints", [])
+            if not ex_kps:
+                continue
+
+            ex_sample_indices = [
+                int(i * len(ex_kps) / len(sample_indices))
+                for i in range(len(sample_indices))
+            ] if len(ex_kps) >= len(sample_indices) else list(range(len(ex_kps)))
+
+            pairs = min(len(sample_frames), len(ex_sample_indices))
+            if pairs == 0:
+                continue
+
+            total_sim = 0.0
+            for j in range(pairs):
+                a = normalize_keypoints(sample_frames[j])
+                b = normalize_keypoints(ex_kps[ex_sample_indices[j]])
+                total_sim += cosine_similarity(a, b)
+
+            avg_sim = total_sim / pairs
+            if avg_sim >= DUPLICATE_THRESHOLD:
+                duplicate_move_id = existing["_id"]
+                logger.info(
+                    "Duplicate detected: %.2f similarity with move %s — reusing existing move",
+                    avg_sim, duplicate_move_id,
+                )
+                break
+
+        if duplicate_move_id:
+            move_id = duplicate_move_id
+        else:
+            duration_ms = int((len(frames) / fps) * 1000)
+
+            move_id = str(ObjectId())
+            move_doc = {
+                "_id": move_id,
+                "keypoints": frames,
+                "duration_ms": duration_ms,
+                "bpm_range": [max(bpm - 10, 60), bpm + 10],
+                "difficulty": difficulty,
+                "genre_tags": ["uploaded"],
+                "source_video_uri": file_uri,
+            }
+            await moves_collection().insert_one(move_doc)
+            logger.info("Stored move %s from video (%d frames, %d ms)", move_id, len(frames), duration_ms)
 
         move_ids = [move_id]
     else:
