@@ -1,4 +1,4 @@
-# JustDance AI
+# ReMix
 
 AI-powered "Just Dance" style web application that generates dance choreographies from uploaded videos and provides feedback on your performance.
 
@@ -176,6 +176,9 @@ npm run dev
 | POST | `/api/feedback/analyze` | Analyze performance video |
 | GET | `/api/users/history` | Get past session scores |
 | GET | `/api/health` | Health check |
+
+## Sources
+Humanoid 3D Model: https://sketchfab.com/3d-models/low-poly-stick-figure-rigged-47e49c8f24d14fb7a3d477640e3d0cf2
 
 ## Built With
 
