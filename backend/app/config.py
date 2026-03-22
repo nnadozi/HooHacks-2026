@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     AUTH0_AUDIENCE: str = ""
 
     # Scoring
-    SCORE_THRESHOLDS: str = '{"perfect": 0.75, "good": 0.60, "ok": 0.40}'
+    SCORE_THRESHOLDS: str = '{"perfect": 0.60, "good": 0.45, "ok": 0.25}'
 
     # Limits
     MAX_UPLOAD_SIZE_MB: int = 100

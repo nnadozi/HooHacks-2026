@@ -83,7 +83,7 @@ def pose_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
     # Convert distance to similarity: 0 distance -> 1.0, large distance -> 0.0
     # With uniform scaling, distances are more spread out so use a wider divisor
-    similarity = max(0.0, 1.0 - (mean_dist / 0.60))
+    similarity = max(0.0, 1.0 - (mean_dist / 0.85))
     return similarity
 
 

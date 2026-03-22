@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.db import feedback_collection
 
@@ -27,3 +27,22 @@ async def get_history():
         )
 
     return {"history": results}
+
+
+@router.get("/feedback/{feedback_id}")
+async def get_feedback(feedback_id: str):
+    doc = await feedback_collection().find_one({"_id": feedback_id})
+    if not doc:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Feedback not found", "code": "JOB_NOT_FOUND"},
+        )
+
+    return {
+        "id": doc["_id"],
+        "choreography_id": doc["choreography_id"],
+        "score": doc["score"],
+        "grade_breakdown": doc["grade_breakdown"],
+        "critiques": doc["critiques"],
+        "created_at": doc.get("created_at"),
+    }

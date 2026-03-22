@@ -3,8 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import Recorder from "@/components/Recorder";
 import SkeletonCanvas from "@/components/SkeletonCanvas";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,15 +25,25 @@ import {
 import type { Keypoint } from "@/types";
 
 const ACCEPTED_VIDEO_TYPES = "video/mp4,video/quicktime,video/webm";
+const COUNTDOWN_SECONDS = 3;
+
+type PageMode = "preview" | "countdown" | "recording" | "submitting";
 
 export default function ChoreographyPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Live recording state
+  const [mode, setMode] = useState<PageMode>("preview");
+  const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: preview, isLoading, refetch } = useQuery({
     queryKey: ["choreography-preview", id],
@@ -42,6 +53,94 @@ export default function ChoreographyPage() {
 
   const allFrames: Keypoint[][] =
     preview?.moves.flatMap((m) => m.keypoints) || [];
+
+  // Calculate total duration from preview data
+  const totalDurationMs = useMemo(() => {
+    if (!preview?.moves) return 0;
+    return preview.moves.reduce((sum, m) => sum + (m.duration_ms || 0), 0);
+  }, [preview]);
+
+  // Get source video URL if available (first move with a source video)
+  const sourceVideoUrl = useMemo(() => {
+    const moveWithVideo = preview?.moves.find((m) => m.source_video_uri);
+    return moveWithVideo?.source_video_uri
+      ? getVideoServeUrl(moveWithVideo.source_video_uri)
+      : null;
+  }, [preview]);
+
+  // Sync video playback with isPlaying state
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !sourceVideoUrl) return;
+
+    if (isPlaying) {
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [isPlaying, sourceVideoUrl]);
+
+  // Auto-stop recording after choreography duration
+  const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (mode === "recording" && totalDurationMs > 0) {
+      autoStopRef.current = setTimeout(() => {
+        setIsPlaying(false);
+        setMode("submitting");
+      }, totalDurationMs);
+      return () => {
+        if (autoStopRef.current) clearTimeout(autoStopRef.current);
+      };
+    }
+  }, [mode, totalDurationMs]);
+
+  // Countdown logic
+  const startCountdown = useCallback(() => {
+    setMode("countdown");
+    setCountdown(COUNTDOWN_SECONDS);
+
+    countdownRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (countdownRef.current) clearInterval(countdownRef.current);
+          // Start recording + playback
+          setMode("recording");
+          setIsPlaying(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  // Cleanup countdown on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
+
+  const handleRecordingComplete = useCallback(
+    async (blob: Blob) => {
+      setMode("submitting");
+      try {
+        const result = await analyzeFeedback(blob, id);
+        router.push(`/feedback/${id}?job_id=${result.job_id}`);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Upload failed");
+        setMode("preview");
+      }
+    },
+    [id, router]
+  );
+
+  const handleCancelRecording = useCallback(() => {
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    if (autoStopRef.current) clearTimeout(autoStopRef.current);
+    setIsPlaying(false);
+    setMode("preview");
+  }, []);
 
   const handleUploadVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -66,6 +165,8 @@ export default function ChoreographyPage() {
       setIsRegenerating(false);
     }
   };
+
+  const isRecordingFlow = mode === "countdown" || mode === "recording" || mode === "submitting";
 
   if (isLoading) {
     return (

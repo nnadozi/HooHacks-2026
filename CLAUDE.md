@@ -81,16 +81,22 @@ npm run build && npm run start     # Production build
 │   │   │   ├── Recorder.tsx      # getUserMedia / MediaRecorder recording UI
 │   │   │   ├── FeedbackPanel.tsx  # Timestamped critique display
 │   │   │   ├── ScoreDisplay.tsx   # Perfect/Good/OK/Miss breakdown + aggregate score
+│   │   │   ├── JobPoller.tsx      # Job polling UI component
+│   │   │   ├── SongCard.tsx       # Song display card component
+│   │   │   ├── SongList.tsx       # Song list/grid component
 │   │   │   └── providers.tsx      # QueryClientProvider wrapper
 │   │   ├── store/
 │   │   │   └── index.ts          # Zustand store (choreography, feedback, session state)
 │   │   ├── hooks/
 │   │   │   ├── useJobPoller.ts   # React Query hook for polling /api/jobs/{job_id}
+│   │   │   ├── usePoseDetection.ts # MediaPipe pose detection hook for in-browser tracking
 │   │   │   └── useRecorder.ts    # getUserMedia + MediaRecorder lifecycle hook
 │   │   ├── lib/
-│   │   │   └── api.ts            # Typed API client functions (no auth)
+│   │   │   ├── api.ts            # Typed API client functions (no auth)
+│   │   │   └── utils.ts          # Shared utility functions (cn helper, etc.)
 │   │   └── types/
-│   │       └── index.ts          # Shared TypeScript types (Keypoint, Move, Feedback, etc.)
+│   │       ├── index.ts          # Shared TypeScript types (Keypoint, Move, Feedback, etc.)
+│   │       └── mediapipe.d.ts    # MediaPipe type declarations
 │   ├── package.json
 │   └── Dockerfile
 └── docker-compose.yml

@@ -76,6 +76,10 @@ export async function getChoreographyPreview(
   return res.json();
 }
 
+export function getVideoServeUrl(gsUri: string): string {
+  return `${API_URL}/api/videos/serve?uri=${encodeURIComponent(gsUri)}`;
+}
+
 export async function analyzeFeedback(
   file: File | Blob,
   choreographyId: string

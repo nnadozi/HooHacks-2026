@@ -5,7 +5,6 @@ import { useCallback, useRef, useState } from "react";
 
 import FeedbackPanel from "@/components/FeedbackPanel";
 import JobPoller from "@/components/JobPoller";
-import Recorder from "@/components/Recorder";
 import ScoreDisplay from "@/components/ScoreDisplay";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -29,15 +28,18 @@ export default function FeedbackPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initialJobId = searchParams.get("job_id");
-  const [phase, setPhase] = useState<"record" | "uploading" | "polling" | "results">(
-    initialJobId ? "polling" : "record"
+  const [phase, setPhase] = useState<"upload" | "uploading" | "polling" | "results">(
+    initialJobId ? "polling" : "upload"
   );
   const [jobId, setJobId] = useState<string | null>(initialJobId);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const submitPerformance = useCallback(
-    async (file: Blob | File) => {
+  const handleFileUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
       setPhase("uploading");
       setError(null);
 
@@ -47,39 +49,26 @@ export default function FeedbackPage() {
         setPhase("polling");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed");
-        setPhase("record");
+        setPhase("upload");
       }
     },
     [choreographyId]
   );
 
-  const handleRecordingComplete = useCallback(
-    (blob: Blob) => submitPerformance(blob),
-    [submitPerformance]
-  );
-
-  const handleFileUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) submitPerformance(file);
-    },
-    [submitPerformance]
-  );
-
   const handleJobComplete = useCallback(
     async (job: JobStatus) => {
       if (job.status === "done" && job.result_id) {
-        const data = await getUserHistory();
-        const result = data.history?.find(
-          (f: FeedbackResult) => f.id === job.result_id
-        );
-        if (result) {
+        try {
+          const result = await getFeedbackById(job.result_id);
           setFeedbackResult(result);
+          setPhase("results");
+        } catch {
+          setError("Failed to load feedback results. Please try again.");
+          setPhase("upload");
         }
-        setPhase("results");
       } else {
         setError("Processing failed. Please try again.");
-        setPhase("record");
+        setPhase("upload");
       }
     },
     []
