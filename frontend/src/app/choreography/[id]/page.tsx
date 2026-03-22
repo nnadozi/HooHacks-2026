@@ -1,13 +1,25 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import SkeletonCanvas from "@/components/SkeletonCanvas";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { analyzeFeedback, getChoreographyPreview, regenerateChoreography } from "@/lib/api";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import {
+  analyzeFeedback,
+  getChoreographyPreview,
+  regenerateChoreography,
+} from "@/lib/api";
 import type { Keypoint } from "@/types";
 
 const ACCEPTED_VIDEO_TYPES = "video/mp4,video/quicktime,video/webm";
@@ -27,7 +39,6 @@ export default function ChoreographyPage() {
     enabled: !!id,
   });
 
-  // Flatten all move keypoints into a single frame sequence
   const allFrames: Keypoint[][] =
     preview?.moves.flatMap((m) => m.keypoints) || [];
 
@@ -57,78 +68,101 @@ export default function ChoreographyPage() {
 
   if (isLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-zinc-600 border-t-cyan-400" />
+      <main className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center gap-3 bg-background px-4">
+        <Loader2 className="size-9 animate-spin text-muted-foreground" aria-hidden />
+        <p className="text-sm text-muted-foreground">Loading preview…</p>
       </main>
     );
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center gap-8 p-8">
-      <h1 className="text-3xl font-bold">Choreography Preview</h1>
+    <main className="min-h-[calc(100vh-3.5rem)] bg-background px-4 py-8 sm:py-10">
+      <div className="mx-auto flex max-w-4xl flex-col gap-8">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+            Preview
+          </h1>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+            Play the skeleton, shuffle moves, then record or upload a performance
+            video.
+          </p>
+        </div>
 
-      {preview && (
-        <Card className="border-zinc-700 bg-zinc-900">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-lg">
-              <span>{preview.bpm} BPM</span>
-              <span className="rounded bg-zinc-800 px-2 py-0.5 text-sm capitalize text-zinc-400">
-                {preview.difficulty}
-              </span>
-              <span className="text-sm text-zinc-500">
-                {preview.moves.length} moves
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center gap-6">
-            <SkeletonCanvas
-              frames={allFrames}
-              fps={30}
-              isPlaying={isPlaying}
-            />
+        {preview && (
+          <Card className="border-border shadow-sm">
+            <CardHeader className="gap-1">
+              <CardTitle className="text-base font-medium">Routine</CardTitle>
+              <CardDescription>
+                {preview.bpm} BPM · {preview.difficulty} · {preview.moves.length}{" "}
+                moves
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center gap-6">
+              <div className="overflow-hidden rounded-lg border border-border">
+                <SkeletonCanvas
+                  frames={allFrames}
+                  fps={30}
+                  isPlaying={isPlaying}
+                />
+              </div>
 
-            <div className="flex gap-3">
-              <Button
-                onClick={() => setIsPlaying(!isPlaying)}
-                variant="outline"
-              >
-                {isPlaying ? "Pause" : "Play Preview"}
-              </Button>
+              <Separator className="max-w-md" />
 
-              <Button
-                onClick={handleRegenerate}
-                variant="outline"
-                disabled={isRegenerating}
-              >
-                {isRegenerating ? "Regenerating..." : "Regenerate"}
-              </Button>
+              <div className="flex w-full flex-wrap items-center justify-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsPlaying(!isPlaying)}
+                >
+                  {isPlaying ? "Pause" : "Play"}
+                </Button>
 
-              <Button
-                onClick={() => router.push(`/feedback/${id}`)}
-                size="lg"
-              >
-                Record Performance
-              </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isRegenerating}
+                  className="gap-2"
+                  onClick={handleRegenerate}
+                >
+                  {isRegenerating ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Regenerating…
+                    </>
+                  ) : (
+                    "Regenerate"
+                  )}
+                </Button>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={ACCEPTED_VIDEO_TYPES}
-                onChange={handleUploadVideo}
-                className="hidden"
-              />
-              <Button
-                variant="outline"
-                size="lg"
-                disabled={isUploading}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {isUploading ? "Uploading..." : "Upload Video"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                <Button
+                  type="button"
+                  size="lg"
+                  onClick={() => router.push(`/feedback/${id}`)}
+                >
+                  Record
+                </Button>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ACCEPTED_VIDEO_TYPES}
+                  onChange={handleUploadVideo}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="lg"
+                  disabled={isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {isUploading ? "Uploading…" : "Upload video"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </main>
   );
 }
