@@ -1,5 +1,6 @@
-import vertexai
-from vertexai.generative_models import GenerativeModel
+import json
+import re
+from collections.abc import Iterable
 
 from app.config import get_settings
 
@@ -17,40 +18,135 @@ JOINT_NAMES = [
 ]
 
 
+def _normalize_xy(keypoints: list[dict], min_visibility: float = 0.5) -> list[dict] | None:
+    """Normalize x/y keypoints to a unit bounding box.
+
+    Normalization is computed from joints with visibility >= min_visibility.
+    Returns a keypoint list (same length) with normalized x/y, or None if bounds
+    cannot be computed (e.g., no sufficiently visible joints).
+    """
+    if not keypoints:
+        return None
+
+    xs: list[float] = []
+    ys: list[float] = []
+    for kp in keypoints:
+        if kp.get("visibility", 0.0) >= min_visibility and "x" in kp and "y" in kp:
+            xs.append(float(kp["x"]))
+            ys.append(float(kp["y"]))
+
+    if not xs or not ys:
+        return None
+
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    range_x = max(max_x - min_x, 1e-6)
+    range_y = max(max_y - min_y, 1e-6)
+
+    normalized: list[dict] = []
+    for kp in keypoints:
+        x = kp.get("x")
+        y = kp.get("y")
+        if x is None or y is None:
+            normalized.append(kp)
+            continue
+        normalized.append(
+            {
+                **kp,
+                "x": (float(x) - min_x) / range_x,
+                "y": (float(y) - min_y) / range_y,
+            }
+        )
+    return normalized
+
+
 def build_joint_deltas(
     ref_keypoints: list[dict], perf_keypoints: list[dict]
 ) -> list[dict]:
     """Convert raw keypoints to human-readable joint deltas.
 
-    Returns a list of {joint, expected: {x,y}, actual: {x,y}, delta: {dx,dy}}.
+    Returns a list of {joint, expected: {x,y}, actual: {x,y}, delta: {dx,dy}} where
+    x/y are first normalized to the dancer's unit bounding box (0-1 range).
     Only includes joints with visibility > 0.5 in both frames.
     """
+    min_visibility = 0.5
+    delta_threshold = 0.05
+    max_joints = 6
+
+    # Normalize each frame to a unit bounding box, matching the scoring contract.
+    # If bounds can't be computed (e.g., low visibility), fall back to raw coords.
+    ref_norm = _normalize_xy(ref_keypoints, min_visibility=min_visibility) or ref_keypoints
+    perf_norm = _normalize_xy(perf_keypoints, min_visibility=min_visibility) or perf_keypoints
+
+    candidates: list[dict] = []
     deltas = []
     for i, name in enumerate(JOINT_NAMES):
-        if i >= len(ref_keypoints) or i >= len(perf_keypoints):
+        if i >= len(ref_norm) or i >= len(perf_norm):
             break
 
-        ref = ref_keypoints[i]
-        perf = perf_keypoints[i]
+        ref = ref_norm[i]
+        perf = perf_norm[i]
 
-        if ref.get("visibility", 0) < 0.5 or perf.get("visibility", 0) < 0.5:
+        if ref.get("visibility", 0.0) < min_visibility or perf.get("visibility", 0.0) < min_visibility:
             continue
 
-        dx = perf["x"] - ref["x"]
-        dy = perf["y"] - ref["y"]
+        if "x" not in ref or "y" not in ref or "x" not in perf or "y" not in perf:
+            continue
 
-        # Only include joints with significant delta
-        if abs(dx) > 0.05 or abs(dy) > 0.05:
-            deltas.append(
-                {
-                    "joint": name,
-                    "expected": {"x": round(ref["x"], 3), "y": round(ref["y"], 3)},
-                    "actual": {"x": round(perf["x"], 3), "y": round(perf["y"], 3)},
-                    "delta": {"dx": round(dx, 3), "dy": round(dy, 3)},
-                }
-            )
+        dx = float(perf["x"]) - float(ref["x"])
+        dy = float(perf["y"]) - float(ref["y"])
+        magnitude = abs(dx) + abs(dy)
+
+        candidates.append(
+            {
+                "joint": name,
+                "expected": {"x": round(float(ref["x"]), 3), "y": round(float(ref["y"]), 3)},
+                "actual": {"x": round(float(perf["x"]), 3), "y": round(float(perf["y"]), 3)},
+                "delta": {"dx": round(dx, 3), "dy": round(dy, 3)},
+                "_magnitude": magnitude,
+            }
+        )
+
+    # Prefer joints that exceed a significance threshold, but always keep a few
+    # highest-delta joints so we don't end up with "no critiques" frames.
+    primary = [
+        c for c in candidates
+        if abs(c["delta"]["dx"]) > delta_threshold or abs(c["delta"]["dy"]) > delta_threshold
+    ]
+    chosen = primary if primary else sorted(candidates, key=lambda c: c["_magnitude"], reverse=True)[:3]
+    chosen = sorted(chosen, key=lambda c: c["_magnitude"], reverse=True)[:max_joints]
+
+    for c in chosen:
+        c.pop("_magnitude", None)
+        deltas.append(c)
 
     return deltas
+
+
+def _extract_response_text(response: object) -> str:
+    """Best-effort extraction of plain text from google-genai responses."""
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        return text
+
+    candidates = getattr(response, "candidates", None)
+    if isinstance(candidates, Iterable):
+        for cand in candidates:
+            content = getattr(cand, "content", None)
+            parts = getattr(content, "parts", None)
+            if not isinstance(parts, Iterable):
+                continue
+            chunks: list[str] = []
+            for part in parts:
+                t = getattr(part, "text", None)
+                if isinstance(t, str) and t:
+                    chunks.append(t)
+            if chunks:
+                joined = "".join(chunks).strip()
+                if joined:
+                    return joined
+
+    return ""
 
 
 def generate_critiques(
@@ -66,21 +162,35 @@ def generate_critiques(
     Returns a list of {timestamp_ms: int, text: str}.
     """
     settings = get_settings()
-    vertexai.init(
-        project=settings.GCS_PROJECT_ID,
-        location=settings.VERTEX_AI_LOCATION,
-        api_key=settings.GOOGLE_API_KEY or None,
-    )
-    model = GenerativeModel("gemini-2.0-flash-lite-001")
+    model = "gemini-2.0-flash"
 
     # Build prompt
     frame_descriptions = []
+    ordered_timestamps: list[int] = []
+    fallback_by_ts: dict[int, str] = {}
     for frame in frames_to_critique:
-        deltas = build_joint_deltas(frame["ref_keypoints"], frame["perf_keypoints"])
-        if not deltas:
+        ts = int(frame["timestamp_ms"])
+        if ts not in ordered_timestamps:
+            ordered_timestamps.append(ts)
+
+        ref_kp = frame.get("ref_keypoints") or []
+        perf_kp = frame.get("perf_keypoints") or []
+
+        if not perf_kp:
+            fallback_by_ts[ts] = "No pose detected — move fully into view and ensure good lighting."
             continue
 
-        ts_sec = frame["timestamp_ms"] / 1000
+        deltas = build_joint_deltas(ref_kp, perf_kp)
+        if not deltas:
+            # If the frame scored poorly but we can't identify clear joint deltas,
+            # return a reasonable non-Gemini fallback.
+            fallback_by_ts[ts] = "Try to match the reference pose more closely (arms, shoulders, hips, and knees)."
+            continue
+
+        # If Gemini fails, use a generic but frame-specific fallback.
+        fallback_by_ts[ts] = "Adjust your pose to better match the reference at this moment."
+
+        ts_sec = ts / 1000
         minutes = int(ts_sec // 60)
         seconds = ts_sec % 60
         ts_str = f"{minutes}:{seconds:04.1f}"
@@ -94,51 +204,66 @@ def generate_critiques(
             )
 
         frame_descriptions.append(
-            f"Timestamp {ts_str}:\n" + "\n".join(delta_lines)
+            f"timestamp_ms={frame['timestamp_ms']} ({ts_str}):\n" + "\n".join(delta_lines)
         )
 
     if not frame_descriptions:
-        return []
+        return [{"timestamp_ms": ts, "text": fallback_by_ts[ts]} for ts in ordered_timestamps if ts in fallback_by_ts]
 
     prompt = (
         "You are a dance coach analyzing a student's performance. "
         "For each timestamp below, the student's pose differs from the reference. "
-        "Joint positions are normalized (0-1 range). "
+        "Joint positions are normalized to the dancer's bounding box (0-1 range). "
         "Positive x delta means too far right, positive y delta means too far down.\n\n"
-        "For each timestamp, return exactly one concise critique sentence explaining "
-        "what the student should fix. Format each line as:\n"
-        "TIMESTAMP — critique\n\n"
+        "Return ONLY a JSON array — no markdown, no extra text. Each element must have:\n"
+        "  \"timestamp_ms\": integer (copy exactly from the data below)\n"
+        "  \"text\": one concise sentence telling the student what to fix\n\n"
+        "Data:\n"
         + "\n\n".join(frame_descriptions)
     )
 
-    response = model.generate_content(prompt)
-    text = response.text.strip()
+    try:
+        from google import genai  # type: ignore
 
-    # Parse response lines
-    critiques = []
-    for frame in frames_to_critique:
-        ts_sec = frame["timestamp_ms"] / 1000
-        minutes = int(ts_sec // 60)
-        seconds = ts_sec % 60
-        ts_str = f"{minutes}:{seconds:04.1f}"
-
-        for line in text.split("\n"):
-            if ts_str in line and "—" in line:
-                critique_text = line.split("—", 1)[1].strip()
-                critiques.append(
-                    {
-                        "timestamp_ms": frame["timestamp_ms"],
-                        "text": critique_text,
-                    }
-                )
-                break
-        else:
-            # If Gemini didn't produce a matching line, still include a generic one
-            critiques.append(
-                {
-                    "timestamp_ms": frame["timestamp_ms"],
-                    "text": "Pose needs improvement at this timestamp.",
-                }
+        if settings.VERTEX_PROJECT_ID:
+            client = genai.Client(
+                vertexai=True,
+                project=settings.VERTEX_PROJECT_ID,
+                location=settings.VERTEX_AI_LOCATION,
             )
+        elif settings.GOOGLE_API_KEY:
+            client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+        else:
+            raise RuntimeError("Missing GOOGLE_API_KEY (or VERTEX_PROJECT_ID) for Gemini critiques.")
 
-    return critiques
+        response = client.models.generate_content(model=model, contents=prompt)
+        raw = _extract_response_text(response).strip()
+    except Exception:
+        # If Gemini is unavailable/misconfigured, return fallbacks rather than nothing.
+        return [{"timestamp_ms": ts, "text": fallback_by_ts[ts]} for ts in ordered_timestamps if ts in fallback_by_ts]
+
+    # Strip markdown code fences if the model wraps the JSON
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
+    raw = re.sub(r"```\s*$", "", raw, flags=re.MULTILINE).strip()
+
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        critiques = [
+            {"timestamp_ms": int(item["timestamp_ms"]), "text": str(item["text"])}
+            for item in parsed
+            if "timestamp_ms" in item and "text" in item
+        ]
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        critiques = []
+
+    by_ts = {c["timestamp_ms"]: c["text"] for c in critiques}
+
+    merged: list[dict] = []
+    for ts in ordered_timestamps:
+        text = by_ts.get(ts) or fallback_by_ts.get(ts)
+        if text:
+            merged.append({"timestamp_ms": ts, "text": text})
+
+    return merged

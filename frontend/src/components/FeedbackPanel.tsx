@@ -8,10 +8,12 @@ interface FeedbackPanelProps {
 }
 
 function formatTimestamp(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
+  const safeMs = Number.isFinite(ms) ? ms : 0;
+  const totalSeconds = Math.floor(safeMs / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  const tenths = Math.floor((safeMs % 1000) / 100);
+  return `${minutes}:${seconds.toString().padStart(2, "0")}.${tenths}`;
 }
 
 export default function FeedbackPanel({ critiques }: FeedbackPanelProps) {
@@ -25,6 +27,8 @@ export default function FeedbackPanel({ critiques }: FeedbackPanelProps) {
     );
   }
 
+  const ordered = [...critiques].sort((a, b) => a.timestamp_ms - b.timestamp_ms);
+
   return (
     <Card className="border-zinc-700 bg-zinc-900">
       <CardHeader>
@@ -32,8 +36,8 @@ export default function FeedbackPanel({ critiques }: FeedbackPanelProps) {
       </CardHeader>
       <CardContent>
         <ul className="space-y-3">
-          {critiques.map((critique, i) => (
-            <li key={i} className="flex gap-3 text-sm">
+          {ordered.map((critique) => (
+            <li key={`${critique.timestamp_ms}-${critique.text}`} className="flex gap-3 text-sm">
               <span className="shrink-0 font-mono text-cyan-400">
                 {formatTimestamp(critique.timestamp_ms)}
               </span>

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     GCS_BUCKET_NAME: str = ""
 
     # Vertex AI
+    VERTEX_PROJECT_ID: str = ""
     GOOGLE_API_KEY: str = ""
     VERTEX_AI_LOCATION: str = "us-central1"
 
