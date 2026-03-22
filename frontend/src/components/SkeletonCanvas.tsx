@@ -92,8 +92,8 @@ export default function SkeletonCanvas({
         return;
       }
 
-      // Draw bones
-      ctx.strokeStyle = "#22d3ee"; // cyan
+      // Bones / joints: neutral + accent (avoid a second “brand” blue on canvas)
+      ctx.strokeStyle = "#64748b";
       ctx.lineWidth = 3;
       if (overlay) {
         ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
@@ -111,12 +111,7 @@ export default function SkeletonCanvas({
         ctx.stroke();
       }
 
-      // Draw joints
-      if (overlay) {
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-      }
-      ctx.fillStyle = "#f43f5e"; // rose
+      ctx.fillStyle = "#fb7185";
       for (const kp of frame) {
         if (kp.visibility < 0.5) continue;
         ctx.beginPath();
@@ -136,11 +131,7 @@ export default function SkeletonCanvas({
       ref={canvasRef}
       width={width}
       height={height}
-      className={
-        overlay
-          ? "pointer-events-none absolute left-0 top-0 h-full w-full rounded-lg"
-          : "rounded-lg border border-zinc-700 bg-zinc-900"
-      }
+      className="rounded-xl border border-border bg-card/80 shadow-inner"
     />
   );
 }

@@ -101,35 +101,12 @@ def grade_frame(similarity: float) -> GradeTier:
         return GradeTier.MISS
 
 
-def _resample_frames(
-    frames: list[list[dict]], source_count: int, target_count: int
-) -> list[list[dict]]:
-    """Resample frames to a target count using nearest-neighbour interpolation.
-
-    Maps each target index to the closest source index so that frames align
-    proportionally in time.
-    """
-    if target_count <= 0 or source_count <= 0 or not frames:
-        return []
-    resampled: list[list[dict]] = []
-    for i in range(target_count):
-        src_idx = int(i * source_count / target_count)
-        src_idx = min(src_idx, len(frames) - 1)
-        resampled.append(frames[src_idx])
-    return resampled
-
-
 def compare_frames(
     reference_frames: list[list[dict]],
     performance_frames: list[list[dict]],
-    perf_fps: float,
-    ref_duration_ms: int | None = None,
+    fps: float,
 ) -> tuple[list[dict], dict[str, int], int]:
     """Compare two sets of keypoint frames and return per-frame results.
-
-    If ref_duration_ms is provided, performance frames are resampled to align
-    with the reference timeline so that timestamps are accurate. Otherwise,
-    falls back to frame-by-frame comparison.
 
     Returns:
         - frame_results: list of {timestamp_ms, similarity, grade, ref_kp, perf_kp}
@@ -140,74 +117,28 @@ def compare_frames(
     frame_results = []
     total_similarity = 0.0
 
-    num_ref = len(reference_frames)
-    num_perf = len(performance_frames)
+    # Align frame counts (use shorter sequence)
+    num_frames = min(len(reference_frames), len(performance_frames))
 
-    # Calculate reference FPS for accurate timestamps
-    if ref_duration_ms and ref_duration_ms > 0 and num_ref > 0:
-        ref_fps = num_ref / (ref_duration_ms / 1000.0)
-    else:
-        ref_fps = perf_fps
-
-    # Calculate performance duration in ms
-    perf_duration_ms = int((num_perf / perf_fps) * 1000) if perf_fps > 0 else 0
-    ref_dur = ref_duration_ms if ref_duration_ms and ref_duration_ms > 0 else int((num_ref / ref_fps) * 1000)
-
-    # Resample performance frames to match reference frame count
-    # so that frame i of performance corresponds to the same moment in time
-    # as frame i of reference
-    if num_perf > 0 and num_ref > 0:
-        # How many reference frames are covered by the performance duration
-        covered_ref_frames = num_ref
-        if ref_dur > 0 and perf_duration_ms < ref_dur:
-            # Performance is shorter — only covers a portion of the reference
-            covered_ref_frames = max(1, int(num_ref * perf_duration_ms / ref_dur))
-
-        # Resample performance frames to align with the covered portion of reference
-        aligned_perf = _resample_frames(performance_frames, num_perf, covered_ref_frames)
-    else:
-        aligned_perf = performance_frames
-        covered_ref_frames = 0
-
-    # Compare aligned frames
-    overlap = min(num_ref, len(aligned_perf))
-    for i in range(overlap):
+    for i in range(num_frames):
         ref_norm = normalize_keypoints(reference_frames[i])
-        perf_norm = normalize_keypoints(aligned_perf[i])
+        perf_norm = normalize_keypoints(performance_frames[i])
 
         sim = pose_similarity(ref_norm, perf_norm)
         grade = grade_frame(sim)
         breakdown[grade.value] += 1
         total_similarity += sim
 
-        # Timestamp based on reference timeline
-        timestamp_ms = int((i / ref_fps) * 1000)
+        timestamp_ms = int((i / fps) * 1000)
         frame_results.append(
             {
                 "timestamp_ms": timestamp_ms,
                 "similarity": sim,
                 "grade": grade.value,
                 "ref_keypoints": reference_frames[i],
-                "perf_keypoints": aligned_perf[i],
+                "perf_keypoints": performance_frames[i],
             }
         )
 
-    # Count unmatched reference frames as misses (performance was too short)
-    missed_frames = num_ref - overlap
-    if missed_frames > 0:
-        breakdown["miss"] += missed_frames
-        for i in range(overlap, num_ref):
-            timestamp_ms = int((i / ref_fps) * 1000)
-            frame_results.append(
-                {
-                    "timestamp_ms": timestamp_ms,
-                    "similarity": 0.0,
-                    "grade": "miss",
-                    "ref_keypoints": reference_frames[i],
-                    "perf_keypoints": [],
-                }
-            )
-
-    # Score based on total reference frames, not just overlapping ones
-    aggregate = int((total_similarity / max(num_ref, 1)) * 100)
+    aggregate = int((total_similarity / max(num_frames, 1)) * 100)
     return frame_results, breakdown, aggregate

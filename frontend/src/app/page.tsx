@@ -3,11 +3,27 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { generateChoreography } from "@/lib/api";
-
 import SongList from "@/components/SongList";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { generateChoreography } from "@/lib/api";
+import { cn } from "@/lib/utils";
+
+/** Scroll sessions panel into view (works with sticky header). */
+function scrollSessionsIntoView(el: HTMLElement | null) {
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 export default function HomePage() {
   const router = useRouter();
@@ -19,7 +35,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const songListRef = useRef<HTMLDivElement>(null);
+  const songListRef = useRef<HTMLElement>(null);
   const [activeTab, setActiveTab] = useState<"public" | "recent">("public");
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -28,9 +44,14 @@ export default function HomePage() {
     if (droppedFile) setFile(droppedFile);
   }, []);
 
-  const handleSelectMap = (tab: "public" | "recent") => {
+  const goToSessions = (tab: "public" | "recent") => {
     setActiveTab(tab);
-    songListRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Defer until React commits tab + Tabs panel visibility.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollSessionsIntoView(songListRef.current);
+      });
+    });
   };
 
   const handleGenerate = async () => {
@@ -50,26 +71,43 @@ export default function HomePage() {
   };
 
   return (
-    <main className="h-screen w-full overflow-y-auto snap-y snap-mandatory scroll-smooth bg-black overflow-x-hidden">
-      {/* Top section: Main content */}
-      <div className="flex flex-col items-center justify-center h-screen w-full shrink-0 snap-start p-6">
-        <div className="text-center">
-          <h1 className="text-5xl font-bold tracking-tight text-white mb-6">
-            JustDance <span className="text-cyan-400">AI</span>
+    <main className="relative min-h-[calc(100dvh-3.5rem)] w-full overflow-x-hidden pb-16">
+      {/* Top: natural height — avoids clipping when the card is taller than the viewport */}
+      <section className="mx-auto w-full max-w-2xl px-4 pb-10 pt-8 sm:px-6">
+        <div className="mb-10 w-full text-center">
+          <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm backdrop-blur-sm">
+            <span className="size-1.5 rounded-full bg-primary shadow-[0_0_8px_2px_color-mix(in_oklch,var(--primary)_45%,transparent)]" />
+            Dance lab
+          </p>
+          <h1 className="font-heading text-4xl font-bold tracking-[-0.04em] text-foreground sm:text-5xl">
+            New routine
           </h1>
+          <p className="mx-auto mt-4 max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
+            Upload audio or video, preview the skeleton, record your run, then see a
+            score and short notes.
+          </p>
         </div>
 
-        <Card className="w-full max-w-lg border-zinc-700 bg-zinc-900 text-white shadow-2xl">
-          <CardHeader>
-            <CardTitle>Upload a Song</CardTitle>
+        <Card className="w-full gap-0 overflow-hidden rounded-2xl border-2 border-primary/15 bg-card/95 py-0 shadow-xl shadow-primary/[0.07] ring-1 ring-border/60 backdrop-blur-[2px]">
+          <div
+            className="h-1 w-full shrink-0 bg-gradient-to-r from-transparent via-primary/70 to-transparent"
+            aria-hidden
+          />
+          <CardHeader className="space-y-1 px-4 pb-2 pt-6 sm:px-5">
+            <CardTitle className="font-heading text-lg">Upload</CardTitle>
+            <CardDescription>
+              Audio (common formats) or video (MP4, MOV, WebM).
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Drop zone */}
+          <CardContent className="space-y-6 px-4 pb-6 pt-2 sm:px-5">
             <div
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
               onClick={() => fileInputRef.current?.click()}
-              className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-600 p-8 transition hover:border-cyan-500 hover:bg-zinc-800/50"
+              className={cn(
+                "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/25 bg-primary/[0.06] p-9 transition-all",
+                "hover:border-primary/45 hover:bg-primary/[0.1] hover:shadow-inner"
+              )}
             >
               <input
                 ref={fileInputRef}
@@ -79,70 +117,108 @@ export default function HomePage() {
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
               />
               {file ? (
-                <p className="text-sm text-zinc-300">{file.name}</p>
+                <p className="text-center text-sm font-medium text-foreground">
+                  {file.name}
+                </p>
               ) : (
-                <p className="text-sm text-zinc-500">
-                  Drop a song or video here or click to browse
+                <p className="text-center text-sm text-muted-foreground">
+                  Drop a file here or click to choose
                 </p>
               )}
             </div>
 
-            {/* Difficulty selector */}
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-zinc-400">Difficulty:</span>
-              {(["easy", "medium", "hard"] as const).map((level) => (
-                <button
-                  key={level}
-                  onClick={() => setDifficulty(level)}
-                  className={`rounded-md px-3 py-1 text-sm capitalize transition ${difficulty === level
-                      ? "bg-cyan-600 text-white"
-                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                    }`}
-                >
-                  {level}
-                </button>
-              ))}
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Difficulty</Label>
+              <ToggleGroup
+                value={[difficulty]}
+                onValueChange={(next) => {
+                  const v = next[0];
+                  if (v === "easy" || v === "medium" || v === "hard") {
+                    setDifficulty(v);
+                  }
+                }}
+                variant="outline"
+                spacing={0}
+                className="w-full justify-stretch"
+              >
+                {(["easy", "medium", "hard"] as const).map((level) => (
+                  <ToggleGroupItem
+                    key={level}
+                    value={level}
+                    className="flex-1 capitalize"
+                  >
+                    {level}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
             </div>
 
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {error && (
+              <Alert variant="destructive" role="alert">
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
             <Button
+              type="button"
               onClick={handleGenerate}
               disabled={!file || isLoading}
-              className="w-full bg-white text-black hover:bg-zinc-200"
+              className="w-full min-h-12 rounded-xl text-base font-semibold shadow-lg shadow-primary/25 transition-[transform,box-shadow] hover:shadow-xl hover:shadow-primary/30 active:translate-y-px disabled:shadow-none"
               size="lg"
             >
-              {isLoading ? "Generating..." : "Generate Choreography"}
+              {isLoading ? "Generating…" : "Generate"}
             </Button>
 
-            <div className="flex flex-col gap-3 pt-6 border-t border-zinc-800 mt-2">
-              <span className="text-sm text-zinc-400">Or select an existing map:</span>
-              <div className="flex gap-2">
-                <Button 
-                  onClick={() => handleSelectMap("public")}
-                  className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+            <Separator />
+
+            <div className="space-y-3">
+              <p className="text-center text-xs text-muted-foreground">
+                Jump to sessions
+              </p>
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="min-h-11 w-full"
+                  onClick={() => goToSessions("public")}
                 >
-                  Public Beatmaps
+                  How it works
                 </Button>
-                <Button 
-                  onClick={() => handleSelectMap("recent")}
-                  className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="min-h-11 w-full"
+                  onClick={() => goToSessions("recent")}
                 >
-                  Recently Played
+                  Recent
                 </Button>
               </div>
             </div>
           </CardContent>
         </Card>
-      </div>
+      </section>
 
-      {/* Bottom section: Song List bounded on the left */}
-      <div 
+      <section
         ref={songListRef}
-        className="h-screen w-full flex flex-col justify-center items-start px-12 shrink-0 snap-start overflow-hidden p-6"
+        id="sessions"
+        className="scroll-mt-20 border-t border-border/70 bg-gradient-to-b from-muted/25 to-muted/5 px-4 py-12 sm:px-8"
       >
-        <SongList activeTab={activeTab} onTabChange={setActiveTab} />
-      </div>
+        <div className="mx-auto w-full max-w-4xl">
+          <h2 className="mb-8 flex items-center gap-2 font-heading text-xl font-bold tracking-tight text-foreground">
+            <span
+              className="h-px flex-1 max-w-[3rem] bg-gradient-to-r from-transparent to-primary/50"
+              aria-hidden
+            />
+            Sessions
+            <span
+              className="h-px flex-1 bg-gradient-to-l from-transparent to-primary/50"
+              aria-hidden
+            />
+          </h2>
+          <SongList activeTab={activeTab} onTabChange={setActiveTab} />
+        </div>
+      </section>
     </main>
   );
 }

@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.db import close_async_db
-from app.routers import choreography, feedback, jobs, users, videos
+from app.routers import choreography, feedback, jobs, moves, routines, users, videos
 
 settings = get_settings()
 
@@ -71,3 +71,5 @@ app.include_router(videos.router, prefix="/api/videos", tags=["videos"])
 app.include_router(choreography.router, prefix="/api/choreography", tags=["choreography"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
+app.include_router(moves.router, prefix="/api/moves", tags=["moves"])
+app.include_router(routines.router, prefix="/api/routines", tags=["routines"])

@@ -53,17 +53,10 @@ async def analyze_feedback(file: UploadFile, choreography_id: str):
             },
         )
 
-    # Ensure filename has proper extension for codec detection
-    filename = file.filename or "performance"
-    mime_to_ext = {"video/webm": ".webm", "video/mp4": ".mp4", "video/quicktime": ".mov"}
-    ext = mime_to_ext.get(file.content_type or "", ".mp4")
-    if not any(filename.endswith(e) for e in mime_to_ext.values()):
-        filename = filename + ext
-
     # Upload performance video
     try:
         file_uri = await upload_bytes(
-            contents, filename, file.content_type or "video/mp4"
+            contents, file.filename or "performance.mp4", file.content_type or "video/mp4"
         )
         logger.info("Uploaded performance to storage: %s", file_uri)
     except Exception as e:

@@ -41,6 +41,10 @@ def jobs_collection():
     return get_async_db()["jobs"]
 
 
+def routines_collection():
+    return get_async_db()["routines"]
+
+
 # --- Sync client for Celery tasks ---
 
 _sync_client: MongoClient | None = None
@@ -68,3 +72,7 @@ def sync_feedback_collection():
 
 def sync_jobs_collection():
     return get_sync_db()["jobs"]
+
+
+def sync_routines_collection():
+    return get_sync_db()["routines"]

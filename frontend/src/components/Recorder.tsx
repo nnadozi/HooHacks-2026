@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { usePoseDetection } from "@/hooks/usePoseDetection";
 import { useRecorder } from "@/hooks/useRecorder";
+import { cn } from "@/lib/utils";
 
 interface RecorderProps {
   onRecordingComplete: (blob: Blob) => void;
@@ -34,7 +35,6 @@ export default function Recorder({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poseStartedRef = useRef(false);
 
-  // Attach stream to video preview and start pose detection
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
@@ -83,8 +83,6 @@ export default function Recorder({
     }
   }, [externalControl, shouldStop, isRecording, stopRecording]);
 
-  // Notify parent when recording is complete (only once per blob)
-  const notifiedBlobRef = useRef<Blob | null>(null);
   useEffect(() => {
     if (videoBlob && videoBlob !== notifiedBlobRef.current) {
       notifiedBlobRef.current = videoBlob;
@@ -95,44 +93,48 @@ export default function Recorder({
   }, [videoBlob, onRecordingComplete, stopCamera]);
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center">
-      <div className="relative h-full w-full">
+    <div className="flex w-full max-w-[640px] flex-col items-center gap-4">
+      <div
+        className={cn(
+          "relative w-full overflow-hidden rounded-lg border bg-muted/30",
+          isRecording ? "border-destructive/40" : "border-border"
+        )}
+      >
         <video
           ref={videoRef}
           autoPlay
           muted
           playsInline
-          className="absolute inset-0 h-full w-full rounded-lg object-cover"
-          style={{ transform: "scaleX(-1)" }}
+          className="aspect-video w-full object-cover"
         />
-        <canvas
-          ref={canvasRef}
-          className="pointer-events-none absolute inset-0 h-full w-full rounded-lg"
-          style={{ transform: "scaleX(-1)" }}
-        />
+        {isRecording && (
+          <div className="pointer-events-none absolute left-2 top-2 rounded bg-destructive px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+            Rec
+          </div>
+        )}
       </div>
 
       {error && (
-        <p className="text-sm text-red-400">{error}</p>
+        <p className="text-center text-sm text-destructive" role="alert">
+          {error}
+        </p>
       )}
 
-      {!externalControl && (
-        <div className="flex gap-3">
-          {!isRecording ? (
-            <Button onClick={startRecording} size="lg">
-              Start Recording
-            </Button>
-          ) : (
-            <Button onClick={stopRecording} variant="destructive" size="lg">
-              Stop Recording
-            </Button>
-          )}
-        </div>
-      )}
+      <div className="flex gap-2">
+        {!isRecording ? (
+          <Button onClick={startRecording} size="lg">
+            Start
+          </Button>
+        ) : (
+          <Button onClick={stopRecording} variant="destructive" size="lg">
+            Stop
+          </Button>
+        )}
+      </div>
 
       {videoBlob && (
-        <p className="text-sm text-zinc-400">
-          Recording captured ({(videoBlob.size / 1024 / 1024).toFixed(1)} MB)
+        <p className="text-center text-xs text-muted-foreground">
+          {(videoBlob.size / 1024 / 1024).toFixed(1)} MB
         </p>
       )}
     </div>

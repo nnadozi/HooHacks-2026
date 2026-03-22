@@ -3,6 +3,9 @@ import type {
   FeedbackResult,
   GenerateResponse,
   JobStatus,
+  Move,
+  MoveSummary,
+  RoutinePreview,
 } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -97,7 +100,41 @@ export async function getUserHistory(): Promise<{ history: FeedbackResult[] }> {
   return res.json();
 }
 
-export async function getFeedbackById(feedbackId: string): Promise<FeedbackResult> {
-  const res = await apiFetch(`/api/users/feedback/${feedbackId}`);
+export async function listMoves(params?: {
+  difficulty?: "easy" | "medium" | "hard";
+  genre_tag?: string;
+  limit?: number;
+  skip?: number;
+}): Promise<{ moves: MoveSummary[] }> {
+  const search = new URLSearchParams();
+  if (params?.difficulty) search.set("difficulty", params.difficulty);
+  if (params?.genre_tag) search.set("genre_tag", params.genre_tag);
+  if (params?.limit !== undefined) search.set("limit", String(params.limit));
+  if (params?.skip !== undefined) search.set("skip", String(params.skip));
+
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  const res = await apiFetch(`/api/moves${suffix}`);
+  return res.json();
+}
+
+export async function getMove(moveId: string): Promise<Move> {
+  const res = await apiFetch(`/api/moves/${moveId}`);
+  return res.json();
+}
+
+export async function createRoutine(payload: {
+  name: string;
+  move_sequence: string[];
+}): Promise<{ id: string; name: string; move_count: number }> {
+  const res = await apiFetch("/api/routines", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+export async function getRoutinePreview(routineId: string): Promise<RoutinePreview> {
+  const res = await apiFetch(`/api/routines/${routineId}/preview`);
   return res.json();
 }

@@ -8,6 +8,7 @@ Upload a dance video, see the skeleton choreography preview, record yourself per
 
 - **Choreography Extraction** — Upload a dance video and the app extracts pose keypoints using MediaPipe, creating a skeleton choreography
 - **Skeleton Preview** — View the extracted choreography as an animated skeleton overlay on an HTML5 Canvas
+- **Routine Editor** — Build custom routines by dragging stored moves into a timeline (Premiere-style bin + timeline + stick-figure preview)
 - **In-Browser Recording** — Record your performance directly in the browser using your webcam
 - **AI Feedback** — Get timestamped critiques from Google Gemini on frames where your pose differs from the reference
 - **Scoring** — Per-frame grading (Perfect/Good/OK/Miss) with an aggregate score
@@ -84,6 +85,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
 ```
+python -m celery -A app.worker worker --loglevel=info
 
 ### 5. Frontend
 
@@ -114,6 +116,12 @@ Go to [http://localhost:3000](http://localhost:3000)
 3. **Preview** the skeleton animation — click Play to see the extracted poses
 4. **Record your performance** using your webcam or upload a video
 5. **View your score** and AI-generated feedback on where to improve
+
+### Routine Editor
+
+- Open `http://localhost:3000/editor`
+- Drag moves from the **Move Bin** into the **Timeline**, then click **Play** to preview the full routine.
+- If the move bin is empty, generate a choreography from a video first (this seeds the move pool in MongoDB).
 
 ## Running with Docker (alternative)
 

@@ -107,31 +107,13 @@ def get_video_fps(video_path: str) -> float:
     the frame count and duration, or fall back to 30.0.
     """
     converted_path = None
+    """Get the FPS of a video file."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened() and video_path.endswith(".webm"):
         cap.release()
         converted_path = _convert_webm_to_mp4(video_path)
         cap = cv2.VideoCapture(converted_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-    duration_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-
-    # If FPS looks unreasonable (< 1 or > 120), try to estimate from metadata
-    if fps > 120 or fps < 1:
-        # Try duration-based estimation
-        if frame_count > 0:
-            # Seek to end to get duration
-            cap.set(cv2.CAP_PROP_POS_AVI_RATIO, 1)
-            end_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-            if end_ms > 0:
-                fps = frame_count / (end_ms / 1000.0)
-                if fps > 120 or fps < 1:
-                    fps = 30.0
-            else:
-                fps = 30.0
-        else:
-            fps = 30.0
-
     cap.release()
     if converted_path and os.path.exists(converted_path):
         os.unlink(converted_path)

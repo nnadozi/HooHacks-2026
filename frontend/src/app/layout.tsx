@@ -1,21 +1,28 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import Providers from "@/components/providers";
+import { JetBrains_Mono, Roboto } from "next/font/google";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+import "./globals.css";
+import AppHeader from "@/components/AppHeader";
+import Providers from "@/components/providers";
+import { cn } from "@/lib/utils";
+
+/** Roboto for UI + headings; `className` on `<html>` ensures the face applies reliably. */
+const roboto = Roboto({
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
+  variable: "--font-ui",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
+  variable: "--font-mono-token",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "JustDance AI",
-  description: "AI-powered dance choreography and feedback",
+  title: "Remix",
+  description: "Choreography preview, performance capture, and scored feedback.",
 };
 
 export default function RootLayout({
@@ -26,10 +33,24 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className={cn(
+        roboto.variable,
+        roboto.className,
+        jetbrainsMono.variable,
+        "h-full antialiased"
+      )}
+      suppressHydrationWarning
     >
-      <body suppressHydrationWarning className="min-h-full flex flex-col bg-zinc-950 text-zinc-100">
-        <Providers>{children}</Providers>
+      <body
+        className="min-h-full flex flex-col bg-background text-foreground"
+        suppressHydrationWarning
+      >
+        <Providers>
+          <AppHeader />
+          <div className="remix-page-bg relative flex min-h-0 flex-1 flex-col">
+            {children}
+          </div>
+        </Providers>
       </body>
     </html>
   );

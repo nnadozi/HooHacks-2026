@@ -1,142 +1,235 @@
 "use client";
 
-import { Dispatch, SetStateAction, useState } from "react";
-import { LayoutGrid, List } from "lucide-react";
-import SongCard from "./SongCard";
+import { useQuery } from "@tanstack/react-query";
+import { LayoutGrid, List, Loader2 } from "lucide-react";
+import {
+  Dispatch,
+  SetStateAction,
+  useMemo,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
 
-type Song = {
-  id: number;
-  title: string;
-  bpm: number;
-  tags: string[];
-};
+import SongCard, { type SessionRow } from "./SongCard";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getUserHistory } from "@/lib/api";
+import type { FeedbackResult } from "@/types";
+import { cn } from "@/lib/utils";
 
 type SongListProps = {
   activeTab?: "public" | "recent";
   onTabChange?: Dispatch<SetStateAction<"public" | "recent">>;
 };
 
-export default function SongList({ activeTab = "public", onTabChange }: SongListProps) {
+function formatWhen(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function feedbackToSession(f: FeedbackResult, index: number): SessionRow {
+  const when = formatWhen(f.created_at);
+  return {
+    id: f.id,
+    choreographyId: f.choreography_id,
+    title: `Session ${index + 1}`,
+    line2: when ? `${when} · Score ${f.score}` : `Score ${f.score}`,
+    bpm: null,
+    tags: [`${f.score} pts`],
+  };
+}
+
+export default function SongList({
+  activeTab = "public",
+  onTabChange,
+}: SongListProps) {
+  const router = useRouter();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterTag, setFilterTag] = useState("all");
   const [isGridView, setIsGridView] = useState(false);
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["user-history"],
+    queryFn: getUserHistory,
+  });
+
+  const sessions = useMemo(() => {
+    const list = data?.history ?? [];
+    return [...list]
+      .sort((a, b) => {
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return tb - ta;
+      })
+      .map((f, i) => feedbackToSession(f, i));
+  }, [data?.history]);
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sessions;
+    return sessions.filter(
+      (s) =>
+        s.title.toLowerCase().includes(q) ||
+        s.choreographyId.toLowerCase().includes(q) ||
+        s.line2.toLowerCase().includes(q) ||
+        s.tags.some((t) => t.toLowerCase().includes(q))
+    );
+  }, [sessions, searchQuery]);
+
+  const displayed =
+    activeTab === "recent" ? filtered : [];
 
   const activeIndex = hoveredIndex !== null ? hoveredIndex : selectedIndex;
 
-  const songs: Song[] = [
-    { id: 1, title: "tell me (u want it)", bpm: 144, tags: ["anime"] },
-    { id: 2, title: "music", bpm: 144, tags: ["anime", "electronic"] },
-    { id: 3, title: "hollywood forever", bpm: 128, tags: ["j-pop"] },
-    { id: 4, title: "the peace", bpm: 160, tags: ["rock"] },
-    { id: 5, title: "innuendo (i get u)", bpm: 175, tags: ["electronic", "hardcore"] },
-    { id: 6, title: "lovefield", bpm: 140, tags: ["trance"] },
-    { id: 7, title: "do it", bpm: 144, tags: ["electronic", "boss"] },
-    { id: 8, title: "bodyfeeling", bpm: 200, tags: ["hardcore"] },
-    { id: 9, title: "wish u well", bpm: 144, tags: ["other tags"] },
-    { id: 10, title: "do it (yves remix)", bpm: 144, tags: ["other tags"] },
-    { id: 11, title: "wallsocket", bpm: 144, tags: ["other tags"] },
-    { id: 12, title: "harvest sky", bpm: 144, tags: ["other tags"] },
-    { id: 13, title: "yay", bpm: 144, tags: ["pop"] },
-  ];
+  const openPreview = (choreographyId: string) => {
+    router.push(`/choreography/${choreographyId}`);
+  };
 
-  const allTags = Array.from(new Set(songs.flatMap((s) => s.tags))).sort();
-
-  const filteredSongs = songs.filter((song) => {
-    const matchesSearch = song.title.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesTag = filterTag === "all" || song.tags.includes(filterTag);
-    return matchesSearch && matchesTag;
-  });
-
-  const displayedSongs = activeTab === "recent" ? [...filteredSongs].reverse().slice(0, 5) : filteredSongs;
+  const openPerform = (choreographyId: string) => {
+    router.push(`/feedback/${choreographyId}`);
+  };
 
   return (
-    <div className="flex flex-col w-full h-full max-h-screen overflow-hidden">
-      {/* View Tabs */}
-      <div className="flex gap-2 mb-4 flex-shrink-0">
-        <button
-          onClick={() => onTabChange?.("public")}
-          className={`px-4 py-2 font-bold rounded-xl transition-colors ${activeTab === "public"
-            ? "bg-cyan-600 text-white shadow-md"
-            : "bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
-            }`}
-        >
-          Public Beatmaps
-        </button>
-        <button
-          onClick={() => onTabChange?.("recent")}
-          className={`px-4 py-2 font-bold rounded-xl transition-colors ${activeTab === "recent"
-            ? "bg-cyan-600 text-white shadow-md"
-            : "bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
-            }`}
-        >
-          Recently Played
-        </button>
-      </div>
+    <div className="flex w-full flex-col gap-4">
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => {
+          if (v === "public" || v === "recent") onTabChange?.(v);
+        }}
+        className="flex w-full flex-col gap-4"
+      >
+        <TabsList className="h-10 w-full max-w-sm shrink-0 rounded-lg bg-muted/80 p-1">
+          <TabsTrigger value="public" className="flex-1 rounded-md text-sm">
+            How it works
+          </TabsTrigger>
+          <TabsTrigger value="recent" className="flex-1 rounded-md text-sm">
+            Recent
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Header */}
-      <div className="flex gap-4 mb-4 flex-shrink-0">
-        <input
-          type="text"
-          placeholder="Search songs..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 bg-zinc-900 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 placeholder:text-zinc-500"
-        />
+        <TabsContent value="public" className="mt-0 outline-none data-[state=inactive]:hidden">
+          <Card className="border-border shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base font-medium">MVP scope</CardTitle>
+              <CardDescription className="text-pretty">
+                There isn&apos;t a shared song library yet. Upload a file above to
+                generate a routine from your media or the move pool. Past runs
+                appear under Recent after you finish feedback.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Open{" "}
+              <button
+                type="button"
+                className="touch-manipulation font-medium text-foreground underline-offset-4 hover:underline"
+                onClick={() => onTabChange?.("recent")}
+              >
+                Recent
+              </button>{" "}
+              to revisit a score.
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-        <select
-          value={filterTag}
-          onChange={(e) => setFilterTag(e.target.value)}
-          className="bg-zinc-900 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500"
-        >
-          <option value="all">All Tags</option>
-          {allTags.map((tag) => (
-            <option key={tag}>{tag}</option>
-          ))}
-        </select>
-
-        <div className="flex gap-1 bg-zinc-900 border border-zinc-700 rounded-xl p-1">
-          <button onClick={() => setIsGridView(false)}>
-            <List />
-          </button>
-          <button onClick={() => setIsGridView(true)}>
-            <LayoutGrid />
-          </button>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-zinc-950/50 border border-zinc-700 rounded-xl">
-        <div
-          className={
-            isGridView
-              ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4 auto-rows-fr items-stretch"
-              : "flex flex-col gap-2"
-          }
-        >
-          {displayedSongs.map((song, i) => (
-            <SongCard
-              key={song.id}
-              {...song}
-              selected={activeIndex === i}
-              distance={activeIndex !== null ? Math.abs(activeIndex - i) : null}
-              onHover={() => setHoveredIndex(i)}
-              onLeave={() => setHoveredIndex(null)}
-              onClick={() => setSelectedIndex(i)}
-              onPlay={() => console.log("Play:", song.title)}
-              onPractice={() => console.log("Practice:", song.title)}
-              isGridView={isGridView}
+        <TabsContent value="recent" className="mt-0 flex flex-col gap-3 outline-none data-[state=inactive]:hidden">
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Input
+              type="search"
+              placeholder="Filter sessions…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="min-h-11 min-w-[180px] flex-1"
             />
-          ))}
-        </div>
-
-        {displayedSongs.length === 0 && (
-          <div className="text-zinc-500 text-center py-12">
-            No songs found.
+            <div className="flex gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
+              <Button
+                type="button"
+                variant={!isGridView ? "secondary" : "ghost"}
+                size="icon-sm"
+                className="rounded-md touch-manipulation"
+                onClick={() => setIsGridView(false)}
+                aria-label="List view"
+              >
+                <List className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant={isGridView ? "secondary" : "ghost"}
+                size="icon-sm"
+                className="rounded-md touch-manipulation"
+                onClick={() => setIsGridView(true)}
+                aria-label="Grid view"
+              >
+                <LayoutGrid className="size-4" />
+              </Button>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Fixed max height so list scrolls inside; parent no longer needs h-screen / overflow-hidden */}
+          <div className="max-h-[min(70vh,40rem)] min-h-[12rem] overflow-y-auto overflow-x-hidden rounded-lg border border-border bg-muted/20 p-3 overscroll-contain">
+            {isLoading && (
+              <div className="flex flex-col items-center justify-center gap-2 py-14 text-muted-foreground">
+                <Loader2 className="size-7 animate-spin" />
+                <p className="text-sm">Loading…</p>
+              </div>
+            )}
+
+            {isError && (
+              <p className="py-10 text-center text-sm text-destructive">
+                {error instanceof Error ? error.message : "Could not load history."}
+              </p>
+            )}
+
+            {!isLoading && !isError && displayed.length === 0 && (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                No sessions yet.
+              </p>
+            )}
+
+            {!isLoading && !isError && displayed.length > 0 && (
+              <div
+                className={cn(
+                  isGridView
+                    ? "grid auto-rows-fr grid-cols-2 items-stretch gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
+                    : "flex flex-col gap-1"
+                )}
+              >
+                {displayed.map((row, i) => (
+                  <SongCard
+                    key={row.id}
+                    {...row}
+                    selected={activeIndex === i}
+                    distance={
+                      activeIndex !== null ? Math.abs(activeIndex - i) : null
+                    }
+                    onHover={() => setHoveredIndex(i)}
+                    onLeave={() => setHoveredIndex(null)}
+                    onSelect={() => setSelectedIndex(i)}
+                    onPlay={() => openPreview(row.choreographyId)}
+                    onPractice={() => openPerform(row.choreographyId)}
+                    isGridView={isGridView}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -11,7 +11,12 @@ export type Move = {
   duration_ms: number;
   bpm_range: [number, number];
   difficulty: "easy" | "medium" | "hard";
+  genre_tags?: string[];
+  source_video_uri?: string;
+  created_at?: string;
 };
+
+export type MoveSummary = Omit<Move, "keypoints"> & { keypoints?: never };
 
 export type Choreography = {
   id: string;
@@ -70,4 +75,23 @@ export type JobStatus = {
 export type ApiError = {
   error: string;
   code: string;
+};
+
+export type Routine = {
+  id: string;
+  name: string;
+  move_sequence: string[];
+  created_at?: string;
+  updated_at?: string | null;
+};
+
+export type RoutinePreview = {
+  id: string;
+  name: string;
+  moves: {
+    id: string;
+    keypoints: Keypoint[][];
+    duration_ms: number;
+  }[];
+  total_duration_ms: number;
 };

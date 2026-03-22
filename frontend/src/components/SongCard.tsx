@@ -1,29 +1,42 @@
+"use client";
+
 import { Play } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type SongCardProps = {
+/** One row in “Recently played” — backed by real feedback history, not mock songs. */
+export type SessionRow = {
+  id: string;
+  choreographyId: string;
   title: string;
-  bpm: number;
+  line2: string;
+  bpm: number | null;
   tags: string[];
+};
+
+type SongCardProps = SessionRow & {
   selected?: boolean;
   distance?: number | null;
   onHover?: () => void;
   onLeave?: () => void;
-  onClick?: () => void;
-  onPlay?: () => void;
-  onPractice?: () => void;
+  onSelect?: () => void;
+  onPlay: () => void;
+  onPractice: () => void;
   isGridView?: boolean;
 };
 
 export default function SongCard({
   title,
+  line2,
   bpm,
   tags,
   selected = false,
   distance = null,
   onHover,
   onLeave,
-  onClick,
+  onSelect,
   onPlay,
   onPractice,
   isGridView = false,
@@ -32,123 +45,117 @@ export default function SongCard({
     return (
       <div
         className={cn(
-          "bg-zinc-900 border border-zinc-700/50 rounded-xl overflow-hidden cursor-pointer group transition-all duration-300 flex flex-col h-full",
-          "hover:border-cyan-500/50 hover:shadow-[0_0_25px_rgba(34,211,238,0.15)] hover:-translate-y-1",
-          selected && "border-cyan-500 shadow-[0_0_25px_rgba(34,211,238,0.25)]"
+          "group/card flex flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm transition-colors",
+          "hover:border-muted-foreground/25",
+          selected && "border-foreground/25 ring-1 ring-border"
         )}
         onMouseEnter={onHover}
         onMouseLeave={onLeave}
-        onClick={onClick}
+        onClick={onSelect}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect?.();
+          }
+        }}
       >
-        {/* Thumbnail */}
-        <div className="w-full aspect-square bg-zinc-800 relative">
-          {/* Overlay */}
-          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-3">
-            <button
+        <div className="relative aspect-square w-full bg-muted">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55 opacity-0 transition-opacity group-hover/card:opacity-100">
+            <Button
+              type="button"
+              size="sm"
+              className="w-3/4"
               onClick={(e) => {
                 e.stopPropagation();
-                onPlay?.();
+                onPlay();
               }}
-              className="bg-cyan-600 text-white font-bold rounded-lg px-6 py-2 hover:bg-cyan-500 transition-all w-3/4 shadow-md scale-95 group-hover:scale-100"
             >
-              PLAY
-            </button>
-
-            <button
+              Preview
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-3/4 bg-background/80"
               onClick={(e) => {
                 e.stopPropagation();
-                onPractice?.();
+                onPractice();
               }}
-              className="bg-zinc-800 border border-zinc-600 text-white font-bold rounded-lg px-6 py-2 hover:bg-zinc-700 transition-all w-3/4 shadow-md scale-95 group-hover:scale-100"
             >
-              PRACTICE
-            </button>
+              Perform
+            </Button>
           </div>
         </div>
 
-        {/* Info */}
-        <div className="p-4 flex flex-col gap-3">
-          <h2 className="text-lg font-bold text-white leading-tight line-clamp-2">
-            {title}
-          </h2>
-
-          <div className="flex gap-2 flex-wrap">
-            <span className="text-[11px] px-2 py-0.5 bg-zinc-800 border border-zinc-700/50 rounded-md text-zinc-300 font-medium">
-              {bpm} BPM
-            </span>
-
-            {tags.slice(0, 2).map((tag, i) => (
-              <span
-                key={i}
-                className="text-[11px] px-2 py-0.5 bg-zinc-800 border border-zinc-700/50 rounded-md text-zinc-300 font-medium"
-              >
-                {tag}
-              </span>
-            ))}
-
-            {tags.length > 2 && (
-              <span className="text-[11px] px-2 py-0.5 bg-zinc-800 border border-zinc-700/50 rounded-md text-zinc-300 font-medium">
-                +{tags.length - 2}
-              </span>
+        <div className="flex flex-col gap-2 p-4">
+          <h2 className="line-clamp-2 text-lg font-semibold leading-tight">{title}</h2>
+          <p className="line-clamp-1 text-xs text-muted-foreground">{line2}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {bpm != null && (
+              <Badge variant="secondary" className="text-[11px] font-medium">
+                {bpm} BPM
+              </Badge>
             )}
+            {tags.slice(0, 3).map((tag) => (
+              <Badge key={tag} variant="outline" className="text-[11px] font-medium">
+                {tag}
+              </Badge>
+            ))}
           </div>
         </div>
       </div>
     );
   }
 
-  // LIST VIEW
   const widthPercentage =
     distance !== null ? Math.max(60, 80 - distance * 5) : 60;
 
   return (
     <div
-      className="flex items-center gap-4 py-2"
+      className="flex items-center gap-4 py-1.5"
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
     >
       <div
-        onClick={onClick}
+        onClick={onSelect}
         style={{ width: `${widthPercentage}%` }}
         className={cn(
-          "flex items-stretch bg-zinc-900 text-white border border-zinc-700 rounded-xl cursor-pointer h-[100px] transition-all duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]",
+          "flex h-[100px] cursor-pointer items-stretch overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm transition-colors",
           selected
-            ? "scale-[1.02] border-cyan-500/50 shadow-[0_0_20px_rgba(34,211,238,0.1)]"
-            : "hover:scale-[1.01]"
+            ? "border-foreground/20 ring-1 ring-border"
+            : "hover:border-muted-foreground/30"
         )}
       >
-        <div className="w-[84px] h-[84px] bg-zinc-800 rounded-md flex-shrink-0 m-2"></div>
+        <div className="m-2 h-[84px] w-[84px] shrink-0 rounded-md bg-muted" />
 
-        <div className="flex-1 py-2 px-4 flex flex-col justify-center overflow-hidden">
-          <h2 className="text-[28px] tracking-tight font-bold mb-2 truncate">
-            {title}
-          </h2>
-
-          <div className="flex gap-2 flex-wrap items-center">
-            <span className="px-3 py-0.5 bg-zinc-800 text-zinc-300 border border-zinc-700/50 text-sm rounded-md font-medium">
-              {bpm} BPM
-            </span>
-
-            {tags.map((tag, i) => (
-              <span
-                key={i}
-                className="px-3 py-0.5 bg-zinc-800 text-zinc-300 border border-zinc-700/50 text-sm rounded-md font-medium"
-              >
+        <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden py-2 pr-2 pl-1">
+          <h2 className="mb-1 truncate text-2xl font-semibold tracking-tight">{title}</h2>
+          <p className="mb-2 truncate text-sm text-muted-foreground">{line2}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {bpm != null && (
+              <Badge variant="secondary">{bpm} BPM</Badge>
+            )}
+            {tags.map((tag) => (
+              <Badge key={tag} variant="outline">
                 {tag}
-              </span>
+              </Badge>
             ))}
           </div>
         </div>
 
         {selected && (
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onPlay?.();
+              onPlay();
             }}
-            className="w-[84px] h-[84px] bg-cyan-600/20 text-cyan-400 flex items-center justify-center m-2 hover:bg-cyan-600 hover:text-white rounded-lg transition-colors"
+            className="m-2 flex h-[84px] w-[84px] shrink-0 items-center justify-center rounded-lg bg-muted text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            aria-label="Open choreography preview"
           >
-            <Play fill="currentColor" className="w-[36px] h-[36px] ml-1" />
+            <Play className="ml-0.5 size-9 fill-current" />
           </button>
         )}
       </div>
@@ -157,29 +164,31 @@ export default function SongCard({
         className={cn(
           "flex flex-col gap-2 transition-all duration-300",
           selected
-            ? "opacity-100 translate-x-0"
-            : "opacity-0 -translate-x-4 pointer-events-none"
+            ? "pointer-events-auto translate-x-0 opacity-100"
+            : "pointer-events-none -translate-x-2 opacity-0"
         )}
       >
-        <button
+        <Button
+          type="button"
+          variant="outline"
+          className="min-w-[160px]"
           onClick={(e) => {
             e.stopPropagation();
-            onPractice?.();
+            onPractice();
           }}
-          className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-lg font-bold rounded-xl px-6 py-2 hover:bg-zinc-800 hover:text-white transition-colors shadow-md w-[160px]"
         >
-          PRACTICE
-        </button>
-
-        <button
+          Perform
+        </Button>
+        <Button
+          type="button"
+          className="min-w-[160px]"
           onClick={(e) => {
             e.stopPropagation();
-            onPlay?.();
+            onPlay();
           }}
-          className="bg-cyan-600 text-white text-lg font-bold rounded-xl px-6 py-2 hover:bg-cyan-500 transition-colors shadow-md w-[160px]"
         >
-          PLAY
-        </button>
+          Preview
+        </Button>
       </div>
     </div>
   );

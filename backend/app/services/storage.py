@@ -25,7 +25,6 @@ async def upload_bytes(data: bytes, filename: str, content_type: str) -> str:
     return f"gs://{settings.GCS_BUCKET_NAME}/{blob_name}"
 
 
-
 def download_to_temp(uri: str) -> str:
     """Download a gs:// URI to a local temp file and return the path."""
     settings = get_settings()
