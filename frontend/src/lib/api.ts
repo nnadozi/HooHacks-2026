@@ -96,3 +96,8 @@ export async function getUserHistory(): Promise<{ history: FeedbackResult[] }> {
   const res = await apiFetch("/api/users/history");
   return res.json();
 }
+
+export async function getFeedbackById(feedbackId: string): Promise<FeedbackResult> {
+  const res = await apiFetch(`/api/users/feedback/${feedbackId}`);
+  return res.json();
+}

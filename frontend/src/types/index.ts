@@ -31,6 +31,7 @@ export type ChoreographyPreview = {
     id: string;
     keypoints: Keypoint[][];
     duration_ms: number;
+    source_video_uri?: string;
   }[];
 };
 

@@ -17,9 +17,12 @@ def _convert_webm_to_mp4(video_path: str) -> str:
     """
     mp4_path = video_path.rsplit(".", 1)[0] + ".mp4"
     try:
-        subprocess.run(
+        result = subprocess.run(
             [
-                "ffmpeg", "-y", "-i", video_path,
+                "ffmpeg", "-y",
+                "-err_detect", "ignore_err",
+                "-fflags", "+genpts+discardcorrupt",
+                "-i", video_path,
                 "-c:v", "libx264", "-preset", "ultrafast",
                 "-crf", "23", "-an", mp4_path,
             ],
@@ -29,8 +32,12 @@ def _convert_webm_to_mp4(video_path: str) -> str:
         )
         logger.info("Converted WebM to MP4: %s", mp4_path)
         return mp4_path
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        logger.error("ffmpeg conversion failed: %s", e)
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode(errors="replace") if e.stderr else "no stderr"
+        logger.error("ffmpeg conversion failed (exit %d): %s", e.returncode, stderr)
+        raise ValueError(f"Cannot convert video {video_path} — ffmpeg error: {stderr[-500:]}") from e
+    except FileNotFoundError as e:
+        logger.error("ffmpeg not found: %s", e)
         raise ValueError(f"Cannot convert video {video_path} — is ffmpeg installed?") from e
 
 

@@ -1,14 +1,13 @@
 "use client";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import FeedbackPanel from "@/components/FeedbackPanel";
 import JobPoller from "@/components/JobPoller";
-import Recorder from "@/components/Recorder";
 import ScoreDisplay from "@/components/ScoreDisplay";
 import { Button } from "@/components/ui/button";
-import { analyzeFeedback, getUserHistory } from "@/lib/api";
+import { analyzeFeedback, getFeedbackById } from "@/lib/api";
 import type { FeedbackResult, JobStatus } from "@/types";
 
 const ACCEPTED_VIDEO_TYPES = "video/mp4,video/quicktime,video/webm";
@@ -20,15 +19,18 @@ export default function FeedbackPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initialJobId = searchParams.get("job_id");
-  const [phase, setPhase] = useState<"record" | "uploading" | "polling" | "results">(
-    initialJobId ? "polling" : "record"
+  const [phase, setPhase] = useState<"upload" | "uploading" | "polling" | "results">(
+    initialJobId ? "polling" : "upload"
   );
   const [jobId, setJobId] = useState<string | null>(initialJobId);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const submitPerformance = useCallback(
-    async (file: Blob | File) => {
+  const handleFileUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
       setPhase("uploading");
       setError(null);
 
@@ -38,39 +40,26 @@ export default function FeedbackPage() {
         setPhase("polling");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed");
-        setPhase("record");
+        setPhase("upload");
       }
     },
     [choreographyId]
   );
 
-  const handleRecordingComplete = useCallback(
-    (blob: Blob) => submitPerformance(blob),
-    [submitPerformance]
-  );
-
-  const handleFileUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) submitPerformance(file);
-    },
-    [submitPerformance]
-  );
-
   const handleJobComplete = useCallback(
     async (job: JobStatus) => {
       if (job.status === "done" && job.result_id) {
-        const data = await getUserHistory();
-        const result = data.history?.find(
-          (f: FeedbackResult) => f.id === job.result_id
-        );
-        if (result) {
+        try {
+          const result = await getFeedbackById(job.result_id);
           setFeedbackResult(result);
+          setPhase("results");
+        } catch {
+          setError("Failed to load feedback results. Please try again.");
+          setPhase("upload");
         }
-        setPhase("results");
       } else {
         setError("Processing failed. Please try again.");
-        setPhase("record");
+        setPhase("upload");
       }
     },
     []
@@ -82,16 +71,8 @@ export default function FeedbackPage() {
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      {phase === "record" && (
+      {phase === "upload" && (
         <div className="flex w-full max-w-2xl flex-col items-center gap-6">
-          <Recorder onRecordingComplete={handleRecordingComplete} />
-
-          <div className="flex w-full items-center gap-4">
-            <div className="h-px flex-1 bg-zinc-700" />
-            <span className="text-sm text-zinc-500">or</span>
-            <div className="h-px flex-1 bg-zinc-700" />
-          </div>
-
           <div className="flex flex-col items-center gap-2">
             <input
               ref={fileInputRef}
@@ -101,11 +82,10 @@ export default function FeedbackPage() {
               className="hidden"
             />
             <Button
-              variant="outline"
               size="lg"
               onClick={() => fileInputRef.current?.click()}
             >
-              Upload a Video
+              Upload Performance Video
             </Button>
             <p className="text-xs text-zinc-500">MP4, MOV, or WebM (max 100MB)</p>
           </div>
@@ -137,11 +117,7 @@ export default function FeedbackPage() {
           <div className="flex justify-center gap-3">
             <Button
               variant="outline"
-              onClick={() => {
-                setPhase("record");
-                setFeedbackResult(null);
-                setJobId(null);
-              }}
+              onClick={() => router.push(`/choreography/${choreographyId}`)}
             >
               Try Again
             </Button>

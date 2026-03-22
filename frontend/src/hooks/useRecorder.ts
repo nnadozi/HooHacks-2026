@@ -77,9 +77,6 @@ export function useRecorder(): UseRecorderReturn {
         const blob = new Blob(chunksRef.current, { type: "video/webm" });
         setVideoBlob(blob);
         setIsRecording(false);
-
-        // Stop all tracks
-        stopCamera();
       };
 
       mediaRecorderRef.current = recorder;

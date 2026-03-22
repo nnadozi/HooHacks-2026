@@ -22,7 +22,7 @@ export default function Recorder({
   shouldStart = false,
   shouldStop = false,
 }: RecorderProps) {
-  const { isRecording, startRecording, stopRecording, initCamera, videoBlob, error, stream } =
+  const { isRecording, startRecording, stopRecording, initCamera, stopCamera, videoBlob, error, stream } =
     useRecorder();
 
   // Start camera immediately on mount
@@ -89,8 +89,10 @@ export default function Recorder({
     if (videoBlob && videoBlob !== notifiedBlobRef.current) {
       notifiedBlobRef.current = videoBlob;
       onRecordingComplete(videoBlob);
+      // Turn off camera after recording is done
+      stopCamera();
     }
-  }, [videoBlob, onRecordingComplete]);
+  }, [videoBlob, onRecordingComplete, stopCamera]);
 
   return (
     <div className="absolute inset-0 flex flex-col items-center">
