@@ -1,4 +1,5 @@
 import json
+import random
 import re
 from collections.abc import Iterable
 
@@ -123,30 +124,87 @@ def build_joint_deltas(
     return deltas
 
 
-def _direction_hint(dx: float, dy: float) -> str:
-    """Convert a delta into a human-readable direction."""
-    parts = []
-    if abs(dx) > 0.05:
-        parts.append("to the left" if dx > 0 else "to the right")
-    if abs(dy) > 0.05:
-        parts.append("higher" if dy > 0 else "lower")
-    return " and ".join(parts) if parts else "closer to the reference position"
+BODY_GROUP_MAP: dict[str, str] = {
+    "nose": "head", "left_eye_inner": "head", "left_eye": "head", "left_eye_outer": "head",
+    "right_eye_inner": "head", "right_eye": "head", "right_eye_outer": "head",
+    "left_ear": "head", "right_ear": "head", "mouth_left": "head", "mouth_right": "head",
+    "left_shoulder": "arms", "right_shoulder": "arms",
+    "left_elbow": "arms", "right_elbow": "arms",
+    "left_wrist": "hands", "right_wrist": "hands",
+    "left_pinky": "hands", "right_pinky": "hands",
+    "left_index": "hands", "right_index": "hands",
+    "left_thumb": "hands", "right_thumb": "hands",
+    "left_hip": "core", "right_hip": "core",
+    "left_knee": "legs", "right_knee": "legs",
+    "left_ankle": "legs", "right_ankle": "legs",
+    "left_heel": "legs", "right_heel": "legs",
+    "left_foot_index": "legs", "right_foot_index": "legs",
+}
+
+BODY_GROUP_TIPS: dict[str, list[str]] = {
+    "head": ["Try nodding your head more to the beat", "Keep your head movements sharper and more expressive", "Add more head motion to match the energy"],
+    "arms": ["Use bigger, more powerful arm movements", "Extend your arms fully — reach out with more energy", "Make your arm movements sharper and more defined"],
+    "hands": ["Sharpen up your hand movements", "Add more flair to your hand gestures", "Keep your hand positions cleaner and more precise"],
+    "core": ["Engage your core more — add some body rolls or hip movement", "Shift your weight more — use your hips to drive the motion", "Loosen up your torso and move with the rhythm"],
+    "legs": ["Put more power into your legs", "Bend your knees more and commit to the movement", "Add more bounce and energy in your lower body"],
+}
 
 
 def _build_delta_fallback(deltas: list[dict]) -> str:
-    """Build a specific fallback critique from joint deltas when Gemini is unavailable."""
+    """Build a high-level dance coaching fallback from joint deltas."""
     if not deltas:
-        return "Adjust your pose to better match the reference."
+        return "Try to feel the rhythm more and commit to each movement with full energy."
 
-    top = deltas[0]
-    joint = top["joint"].replace("_", " ")
-    direction = _direction_hint(top["delta"]["dx"], top["delta"]["dy"])
+    # Find which body groups are most off
+    group_scores: dict[str, float] = {}
+    for d in deltas:
+        group = BODY_GROUP_MAP.get(d["joint"], "core")
+        mag = abs(d["delta"]["dx"]) + abs(d["delta"]["dy"])
+        group_scores[group] = group_scores.get(group, 0.0) + mag
 
-    if len(deltas) >= 3:
-        joints = [d["joint"].replace("_", " ") for d in deltas[:3]]
-        return f"Multiple joints need adjustment — especially your {joints[0]}, {joints[1]}, and {joints[2]}. Move your {joint} {direction}."
+    top_groups = sorted(group_scores, key=group_scores.get, reverse=True)[:2]  # type: ignore[arg-type]
 
-    return f"Move your {joint} {direction}."
+    tips = []
+    for g in top_groups:
+        group_tips = BODY_GROUP_TIPS.get(g, ["Match the reference pose more closely"])
+        tips.append(random.choice(group_tips))
+
+    return " ".join(tips)
+
+
+def _merge_similar_critiques(critiques: list[dict], similarity_threshold: float = 0.5) -> list[dict]:
+    """Merge consecutive critiques with similar text into time ranges."""
+    if not critiques:
+        return []
+
+    def _words(text: str) -> set[str]:
+        return set(text.lower().split())
+
+    def _similar(a: str, b: str) -> bool:
+        wa, wb = _words(a), _words(b)
+        if not wa or not wb:
+            return False
+        overlap = len(wa & wb)
+        return overlap / min(len(wa), len(wb)) >= similarity_threshold
+
+    merged: list[dict] = []
+    current = critiques[0].copy()
+    current["_end_ms"] = current["timestamp_ms"]
+
+    for c in critiques[1:]:
+        if _similar(current["text"], c["text"]):
+            current["_end_ms"] = c["timestamp_ms"]
+        else:
+            merged.append(current)
+            current = c.copy()
+            current["_end_ms"] = c["timestamp_ms"]
+    merged.append(current)
+
+    result: list[dict] = []
+    for m in merged:
+        result.append({"timestamp_ms": m["timestamp_ms"], "text": m["text"]})
+
+    return result
 
 
 def _extract_response_text(response: object) -> str:
@@ -232,26 +290,27 @@ def generate_critiques(
         )
 
     if not frame_descriptions:
-        return [{"timestamp_ms": ts, "text": fallback_by_ts[ts]} for ts in ordered_timestamps if ts in fallback_by_ts]
+        fallbacks = [{"timestamp_ms": ts, "text": fallback_by_ts[ts]} for ts in ordered_timestamps if ts in fallback_by_ts]
+        return _merge_similar_critiques(fallbacks)
 
     prompt = (
-        "You are an expert dance choreography coach giving feedback to a student. "
+        "You are a fun, encouraging dance coach giving high-level feedback to a student. "
         "For each timestamp below, the student's pose differs from the reference choreography. "
-        "Joint positions are normalized to the dancer's bounding box (0-1 range). "
-        "Positive x delta means the student is too far right; positive y delta means too far down.\n\n"
-        "Guidelines for your critiques:\n"
-        "- Be specific: name the body part AND the direction it needs to move (e.g., \"Raise your left arm higher\" not \"Fix your arm\").\n"
-        "- Be varied: don't repeat the same phrasing across timestamps. Use different sentence structures.\n"
-        "- Prioritize the BIGGEST deltas — those are the most impactful corrections.\n"
-        "- When multiple joints are off in the same direction, describe the movement holistically "
-        "(e.g., \"Shift your weight to the left — your whole upper body is leaning right\").\n"
-        "- Include tips about body mechanics when relevant (e.g., \"Bend your knees more to lower your center of gravity\" "
-        "or \"Rotate your torso to face the front\").\n"
-        "- Mix correction types: positional fixes, rotation cues, weight distribution, extension/contraction, and timing.\n"
-        "- Use encouraging, coaching language — direct but supportive.\n\n"
+        "Joint positions are normalized to the dancer's bounding box (0-1 range).\n\n"
+        "IMPORTANT guidelines:\n"
+        "- Give HIGH-LEVEL dance coaching — talk about body groups (arms, legs, head, core, hands), "
+        "NOT specific joints like 'left_index' or 'right_wrist'.\n"
+        "- Use dance-style language: 'sharper hand movements', 'more power in your legs', "
+        "'nod your head to the beat', 'extend your arms fully', 'loosen up your hips'.\n"
+        "- If multiple timestamps have similar issues, combine them into ONE critique using the EARLIEST timestamp. "
+        "Do NOT include time ranges in the text itself.\n"
+        "- Be encouraging and energetic — like a real dance instructor.\n"
+        "- Focus on energy, sharpness, extension, rhythm, and commitment to the movement.\n"
+        "- Keep it to 1 sentence per critique, max 8 critiques total.\n"
+        "- Do NOT mention coordinate numbers, deltas, or technical joint names.\n\n"
         "Return ONLY a JSON array — no markdown fences, no extra text. Each element must have:\n"
-        "  \"timestamp_ms\": integer (copy exactly from the data below)\n"
-        "  \"text\": 1-2 actionable sentences of coaching feedback\n\n"
+        "  \"timestamp_ms\": integer (use the START of a time range if combining)\n"
+        "  \"text\": 1 sentence of fun, high-level dance coaching\n\n"
         "Data:\n"
         + "\n\n".join(frame_descriptions)
     )
@@ -274,7 +333,8 @@ def generate_critiques(
         raw = _extract_response_text(response).strip()
     except Exception:
         # If Gemini is unavailable/misconfigured, return fallbacks rather than nothing.
-        return [{"timestamp_ms": ts, "text": fallback_by_ts[ts]} for ts in ordered_timestamps if ts in fallback_by_ts]
+        fallbacks = [{"timestamp_ms": ts, "text": fallback_by_ts[ts]} for ts in ordered_timestamps if ts in fallback_by_ts]
+        return _merge_similar_critiques(fallbacks)
 
     # Strip markdown code fences if the model wraps the JSON
     raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
@@ -294,10 +354,10 @@ def generate_critiques(
 
     by_ts = {c["timestamp_ms"]: c["text"] for c in critiques}
 
-    merged: list[dict] = []
+    combined: list[dict] = []
     for ts in ordered_timestamps:
         text = by_ts.get(ts) or fallback_by_ts.get(ts)
         if text:
-            merged.append({"timestamp_ms": ts, "text": text})
+            combined.append({"timestamp_ms": ts, "text": text})
 
-    return merged
+    return _merge_similar_critiques(combined)
