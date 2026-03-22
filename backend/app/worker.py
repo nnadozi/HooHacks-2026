@@ -17,6 +17,8 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
+    # solo pool prevents SIGABRT on macOS from MediaPipe/OpenCV fork incompatibility
+    worker_pool="solo",
 )
 
 # Explicitly import task modules so they register with the app

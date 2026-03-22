@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Database
-    MONGO_URI: str = "mongodb://localhost:27017"
+    MONGO_URI: str = ""
     MONGO_DB_NAME: str = "justdance"
 
     # Redis
@@ -16,8 +16,9 @@ class Settings(BaseSettings):
     GCS_PROJECT_ID: str = ""
     GCS_BUCKET_NAME: str = ""
 
-    # Google Gemini
+    # Vertex AI
     GOOGLE_API_KEY: str = ""
+    VERTEX_AI_LOCATION: str = "us-central1"
 
     # Auth0
     AUTH0_DOMAIN: str = ""

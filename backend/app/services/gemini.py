@@ -1,4 +1,5 @@
-import google.generativeai as genai
+import vertexai
+from vertexai.generative_models import GenerativeModel
 
 from app.config import get_settings
 
@@ -65,8 +66,12 @@ def generate_critiques(
     Returns a list of {timestamp_ms: int, text: str}.
     """
     settings = get_settings()
-    genai.configure(api_key=settings.GOOGLE_API_KEY)
-    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+    vertexai.init(
+        project=settings.GCS_PROJECT_ID,
+        location=settings.VERTEX_AI_LOCATION,
+        api_key=settings.GOOGLE_API_KEY or None,
+    )
+    model = GenerativeModel("gemini-2.0-flash-lite-001")
 
     # Build prompt
     frame_descriptions = []
