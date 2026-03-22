@@ -61,13 +61,14 @@ export default function Recorder({
     }
   }, [stream, startPose]);
 
-  // Cleanup pose detection on unmount
+  // Cleanup pose detection and camera on unmount
   useEffect(() => {
     return () => {
       poseStartedRef.current = false;
       stopPose();
+      stopCamera();
     };
-  }, [stopPose]);
+  }, [stopPose, stopCamera]);
 
   // External control: start
   useEffect(() => {
