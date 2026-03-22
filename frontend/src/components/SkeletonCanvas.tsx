@@ -26,6 +26,12 @@ interface SkeletonCanvasProps {
   isPlaying: boolean;
   width?: number;
   height?: number;
+  /** When true, renders with transparent background for overlaying on video */
+  overlay?: boolean;
+  /** Callback with current frame index so parent can sync */
+  onFrameChange?: (frameIndex: number) => void;
+  /** Optional video element to sync frame index to video currentTime */
+  videoElement?: HTMLVideoElement | null;
 }
 
 export default function SkeletonCanvas({
@@ -34,6 +40,9 @@ export default function SkeletonCanvas({
   isPlaying,
   width = 640,
   height = 480,
+  overlay = false,
+  onFrameChange,
+  videoElement,
 }: SkeletonCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameIndexRef = useRef(0);
@@ -54,13 +63,25 @@ export default function SkeletonCanvas({
     let animId: number;
 
     const draw = (timestamp: number) => {
-      if (!lastTimeRef.current) lastTimeRef.current = timestamp;
-      const elapsed = timestamp - lastTimeRef.current;
+      if (videoElement && videoElement.duration && isFinite(videoElement.duration)) {
+        // Sync frame index to video currentTime
+        const progress = videoElement.currentTime / videoElement.duration;
+        frameIndexRef.current = Math.min(
+          Math.floor(progress * frames.length),
+          frames.length - 1
+        );
+        onFrameChange?.(frameIndexRef.current);
+      } else {
+        // Fallback: independent timer when no video element
+        if (!lastTimeRef.current) lastTimeRef.current = timestamp;
+        const elapsed = timestamp - lastTimeRef.current;
 
-      if (elapsed >= frameDuration) {
-        lastTimeRef.current = timestamp;
-        frameIndexRef.current =
-          (frameIndexRef.current + 1) % frames.length;
+        if (elapsed >= frameDuration) {
+          lastTimeRef.current = timestamp;
+          frameIndexRef.current =
+            (frameIndexRef.current + 1) % frames.length;
+          onFrameChange?.(frameIndexRef.current);
+        }
       }
 
       const frame = frames[frameIndexRef.current];
@@ -74,6 +95,10 @@ export default function SkeletonCanvas({
       // Draw bones
       ctx.strokeStyle = "#22d3ee"; // cyan
       ctx.lineWidth = 3;
+      if (overlay) {
+        ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+        ctx.shadowBlur = 4;
+      }
       for (const [a, b] of CONNECTIONS) {
         if (a >= frame.length || b >= frame.length) continue;
         const pa = frame[a];
@@ -87,6 +112,10 @@ export default function SkeletonCanvas({
       }
 
       // Draw joints
+      if (overlay) {
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+      }
       ctx.fillStyle = "#f43f5e"; // rose
       for (const kp of frame) {
         if (kp.visibility < 0.5) continue;
@@ -100,14 +129,18 @@ export default function SkeletonCanvas({
 
     animId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animId);
-  }, [frames, fps, isPlaying, width, height]);
+  }, [frames, fps, isPlaying, width, height, overlay, onFrameChange, videoElement]);
 
   return (
     <canvas
       ref={canvasRef}
       width={width}
       height={height}
-      className="rounded-lg border border-zinc-700 bg-zinc-900"
+      className={
+        overlay
+          ? "pointer-events-none absolute left-0 top-0 h-full w-full rounded-lg"
+          : "rounded-lg border border-zinc-700 bg-zinc-900"
+      }
     />
   );
 }

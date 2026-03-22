@@ -84,15 +84,16 @@ async def generate_choreography(
         finally:
             os.unlink(tmp.name)
 
-        if not frames:
+        # Keep empty frames to preserve 1:1 mapping with video frames
+        # (SkeletonCanvas skips drawing empty frames gracefully)
+        non_empty = sum(1 for f in frames if f)
+        logger.info("Extracted %d frames (%d with poses) at %.1f fps", len(frames), non_empty, fps)
+
+        if non_empty == 0:
             raise HTTPException(
                 status_code=400,
                 detail={"error": "No pose detected in video", "code": "NO_POSE_DETECTED"},
             )
-
-        # Filter out empty frames (frames where no person was detected)
-        frames = [f for f in frames if f]
-        logger.info("Extracted %d frames with poses at %.1f fps", len(frames), fps)
 
         # Check for duplicate videos in the database (>=98% similarity reuses existing move)
         DUPLICATE_THRESHOLD = 0.95

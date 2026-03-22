@@ -123,6 +123,32 @@ def build_joint_deltas(
     return deltas
 
 
+def _direction_hint(dx: float, dy: float) -> str:
+    """Convert a delta into a human-readable direction."""
+    parts = []
+    if abs(dx) > 0.05:
+        parts.append("to the left" if dx > 0 else "to the right")
+    if abs(dy) > 0.05:
+        parts.append("higher" if dy > 0 else "lower")
+    return " and ".join(parts) if parts else "closer to the reference position"
+
+
+def _build_delta_fallback(deltas: list[dict]) -> str:
+    """Build a specific fallback critique from joint deltas when Gemini is unavailable."""
+    if not deltas:
+        return "Adjust your pose to better match the reference."
+
+    top = deltas[0]
+    joint = top["joint"].replace("_", " ")
+    direction = _direction_hint(top["delta"]["dx"], top["delta"]["dy"])
+
+    if len(deltas) >= 3:
+        joints = [d["joint"].replace("_", " ") for d in deltas[:3]]
+        return f"Multiple joints need adjustment — especially your {joints[0]}, {joints[1]}, and {joints[2]}. Move your {joint} {direction}."
+
+    return f"Move your {joint} {direction}."
+
+
 def _extract_response_text(response: object) -> str:
     """Best-effort extraction of plain text from google-genai responses."""
     text = getattr(response, "text", None)
@@ -177,18 +203,16 @@ def generate_critiques(
         perf_kp = frame.get("perf_keypoints") or []
 
         if not perf_kp:
-            fallback_by_ts[ts] = "No pose detected — move fully into view and ensure good lighting."
+            fallback_by_ts[ts] = "No pose detected — make sure your full body is visible and the lighting is good."
             continue
 
         deltas = build_joint_deltas(ref_kp, perf_kp)
         if not deltas:
-            # If the frame scored poorly but we can't identify clear joint deltas,
-            # return a reasonable non-Gemini fallback.
-            fallback_by_ts[ts] = "Try to match the reference pose more closely (arms, shoulders, hips, and knees)."
+            fallback_by_ts[ts] = "Try to match the reference pose more closely — focus on mirroring the arm positions and hip alignment."
             continue
 
-        # If Gemini fails, use a generic but frame-specific fallback.
-        fallback_by_ts[ts] = "Adjust your pose to better match the reference at this moment."
+        # Build a specific fallback from the top deltas in case Gemini is unavailable
+        fallback_by_ts[ts] = _build_delta_fallback(deltas)
 
         ts_sec = ts / 1000
         minutes = int(ts_sec // 60)
@@ -211,13 +235,23 @@ def generate_critiques(
         return [{"timestamp_ms": ts, "text": fallback_by_ts[ts]} for ts in ordered_timestamps if ts in fallback_by_ts]
 
     prompt = (
-        "You are a dance coach analyzing a student's performance. "
-        "For each timestamp below, the student's pose differs from the reference. "
+        "You are an expert dance choreography coach giving feedback to a student. "
+        "For each timestamp below, the student's pose differs from the reference choreography. "
         "Joint positions are normalized to the dancer's bounding box (0-1 range). "
-        "Positive x delta means too far right, positive y delta means too far down.\n\n"
-        "Return ONLY a JSON array — no markdown, no extra text. Each element must have:\n"
+        "Positive x delta means the student is too far right; positive y delta means too far down.\n\n"
+        "Guidelines for your critiques:\n"
+        "- Be specific: name the body part AND the direction it needs to move (e.g., \"Raise your left arm higher\" not \"Fix your arm\").\n"
+        "- Be varied: don't repeat the same phrasing across timestamps. Use different sentence structures.\n"
+        "- Prioritize the BIGGEST deltas — those are the most impactful corrections.\n"
+        "- When multiple joints are off in the same direction, describe the movement holistically "
+        "(e.g., \"Shift your weight to the left — your whole upper body is leaning right\").\n"
+        "- Include tips about body mechanics when relevant (e.g., \"Bend your knees more to lower your center of gravity\" "
+        "or \"Rotate your torso to face the front\").\n"
+        "- Mix correction types: positional fixes, rotation cues, weight distribution, extension/contraction, and timing.\n"
+        "- Use encouraging, coaching language — direct but supportive.\n\n"
+        "Return ONLY a JSON array — no markdown fences, no extra text. Each element must have:\n"
         "  \"timestamp_ms\": integer (copy exactly from the data below)\n"
-        "  \"text\": one concise sentence telling the student what to fix\n\n"
+        "  \"text\": 1-2 actionable sentences of coaching feedback\n\n"
         "Data:\n"
         + "\n\n".join(frame_descriptions)
     )

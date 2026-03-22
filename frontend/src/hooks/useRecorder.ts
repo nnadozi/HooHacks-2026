@@ -6,6 +6,8 @@ interface UseRecorderReturn {
   isRecording: boolean;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
+  initCamera: () => Promise<void>;
+  stopCamera: () => void;
   videoBlob: Blob | null;
   error: string | null;
   stream: MediaStream | null;
@@ -20,18 +22,46 @@ export function useRecorder(): UseRecorderReturn {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const initCamera = useCallback(async () => {
+    if (streamRef.current) return; // already initialized
+    try {
+      setError(null);
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: 1280, height: 720 },
+        audio: false,
+      });
+      streamRef.current = mediaStream;
+      setStream(mediaStream);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to access camera"
+      );
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      setStream(null);
+    }
+  }, []);
+
   const startRecording = useCallback(async () => {
     try {
       setError(null);
       setVideoBlob(null);
       chunksRef.current = [];
 
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 1280, height: 720 },
-        audio: false,
-      });
+      // Init camera if not already done
+      if (!streamRef.current) {
+        await initCamera();
+      }
 
-      setStream(mediaStream);
+      const mediaStream = streamRef.current;
+      if (!mediaStream) return;
 
       const recorder = new MediaRecorder(mediaStream, {
         mimeType: "video/webm",
@@ -49,8 +79,7 @@ export function useRecorder(): UseRecorderReturn {
         setIsRecording(false);
 
         // Stop all tracks
-        mediaStream.getTracks().forEach((track) => track.stop());
-        setStream(null);
+        stopCamera();
       };
 
       mediaRecorderRef.current = recorder;
@@ -61,7 +90,7 @@ export function useRecorder(): UseRecorderReturn {
         err instanceof Error ? err.message : "Failed to access camera"
       );
     }
-  }, []);
+  }, [initCamera, stopCamera]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === "recording") {
@@ -69,5 +98,5 @@ export function useRecorder(): UseRecorderReturn {
     }
   }, []);
 
-  return { isRecording, startRecording, stopRecording, videoBlob, error, stream };
+  return { isRecording, startRecording, stopRecording, initCamera, stopCamera, videoBlob, error, stream };
 }
