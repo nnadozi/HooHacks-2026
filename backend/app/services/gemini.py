@@ -246,7 +246,30 @@ def generate_critiques(
     Returns a list of {timestamp_ms: int, text: str}.
     """
     settings = get_settings()
-    model = "gemini-2.0-flash"
+    model = settings.GEMINI_MODEL.strip() if settings.GEMINI_MODEL else "gemini-2.0-flash"
+
+    def _parse_model_list(raw: str) -> list[str]:
+        raw = raw.strip()
+        if not raw:
+            return []
+
+        # Accept either JSON (["a","b"]) or a comma-separated string ("a,b").
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                items = [str(x).strip() for x in parsed]
+                return [x for x in items if x]
+        except json.JSONDecodeError:
+            pass
+
+        return [m.strip() for m in raw.split(",") if m.strip()]
+
+    def _model_candidates() -> list[str]:
+        fallbacks = _parse_model_list(getattr(settings, "GEMINI_MODEL_FALLBACKS", "") or "")
+        candidates = [model] + [m for m in fallbacks if m != model]
+        if "gemini-2.0-flash" not in candidates:
+            candidates.append("gemini-2.0-flash")
+        return candidates
 
     # Build prompt
     frame_descriptions = []
@@ -329,8 +352,18 @@ def generate_critiques(
         else:
             raise RuntimeError("Missing GOOGLE_API_KEY (or VERTEX_PROJECT_ID) for Gemini critiques.")
 
-        response = client.models.generate_content(model=model, contents=prompt)
-        raw = _extract_response_text(response).strip()
+        raw = ""
+        for candidate in _model_candidates():
+            try:
+                response = client.models.generate_content(model=candidate, contents=prompt)
+                raw = _extract_response_text(response).strip()
+                if raw:
+                    break
+            except Exception:
+                continue
+
+        if not raw:
+            raise RuntimeError("Gemini returned an empty response (or no configured model was available).")
     except Exception:
         # If Gemini is unavailable/misconfigured, return fallbacks rather than nothing.
         fallbacks = [{"timestamp_ms": ts, "text": fallback_by_ts[ts]} for ts in ordered_timestamps if ts in fallback_by_ts]

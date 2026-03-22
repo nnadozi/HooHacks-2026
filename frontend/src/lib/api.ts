@@ -6,6 +6,7 @@ import type {
   Move,
   MoveSummary,
   RoutinePreview,
+  SessionHistoryRow,
 } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -95,7 +96,7 @@ export async function analyzeFeedback(
   return res.json();
 }
 
-export async function getUserHistory(): Promise<{ history: FeedbackResult[] }> {
+export async function getUserHistory(): Promise<{ history: SessionHistoryRow[] }> {
   const res = await apiFetch("/api/users/history");
   return res.json();
 }

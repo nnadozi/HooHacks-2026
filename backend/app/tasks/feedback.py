@@ -1,8 +1,10 @@
 import logging
 import os
+from datetime import datetime
 
 from bson import ObjectId
 
+from app.config import get_settings
 from app.db import (
     sync_choreographies_collection,
     sync_feedback_collection,
@@ -16,6 +18,7 @@ from app.services.storage import download_to_temp
 from app.worker import celery_app
 
 logger = logging.getLogger("justdance.tasks.feedback")
+settings = get_settings()
 
 def _spread_sample(frames: list[dict], max_items: int) -> list[dict]:
     """Pick up to max_items frames spread across the full list (deterministic)."""
@@ -88,8 +91,13 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
         logger.info("Downloaded performance video to %s", video_path)
 
         try:
-            performance_frames = extract_keypoints(video_path)
-            fps = get_video_fps(video_path)
+            performance_frames = extract_keypoints(
+                video_path,
+                ffmpeg_path=settings.FFMPEG_PATH,
+                model_path=settings.MEDIAPIPE_POSE_MODEL_PATH or None,
+                model_url=settings.MEDIAPIPE_POSE_MODEL_URL or None,
+            )
+            fps = get_video_fps(video_path, ffmpeg_path=settings.FFMPEG_PATH)
             logger.info("Extracted %d performance frames at %.1f fps", len(performance_frames), fps)
         finally:
             os.unlink(video_path)
@@ -135,12 +143,25 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
             "_id": feedback_id,
             "choreography_id": choreography_id,
             "user_id": job["user_id"],
+            "performance_uri": file_uri,
             "score": aggregate_score,
             "grade_breakdown": breakdown,
             "critiques": critiques,
+            "created_at": datetime.utcnow(),
         }
         feedback_col.insert_one(feedback_doc)
         logger.info("Stored feedback %s with score %d", feedback_id, aggregate_score)
+
+        choreos.update_one(
+            {"_id": choreography_id},
+            {
+                "$set": {
+                    "performance_uri": file_uri,
+                    "latest_feedback_id": feedback_id,
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+        )
 
         jobs.update_one(
             {"_id": job_id},

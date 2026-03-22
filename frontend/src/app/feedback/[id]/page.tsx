@@ -2,9 +2,11 @@
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import FeedbackPanel from "@/components/FeedbackPanel";
 import JobPoller from "@/components/JobPoller";
+import Recorder from "@/components/Recorder";
 import ScoreDisplay from "@/components/ScoreDisplay";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { analyzeFeedback, getFeedbackById } from "@/lib/api";
 import type { FeedbackResult, JobStatus } from "@/types";
 
@@ -24,16 +27,36 @@ export default function FeedbackPage() {
   const { id: choreographyId } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initialJobId = searchParams.get("job_id");
-  const [phase, setPhase] = useState<"upload" | "uploading" | "polling" | "results">(
-    initialJobId ? "polling" : "upload"
+  const [phase, setPhase] = useState<
+    "record" | "uploading" | "polling" | "results"
+  >(
+    initialJobId ? "polling" : "record"
   );
   const completedRef = useRef(false);
   const [jobId, setJobId] = useState<string | null>(initialJobId);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const handleRecordingComplete = useCallback(
+    async (blob: Blob) => {
+      setPhase("uploading");
+      setError(null);
+
+      try {
+        const result = await analyzeFeedback(blob, choreographyId);
+        setJobId(result.job_id);
+        setPhase("polling");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Upload failed");
+        setPhase("record");
+      }
+    },
+    [choreographyId]
+  );
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,7 +72,7 @@ export default function FeedbackPage() {
         setPhase("polling");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed");
-        setPhase("upload");
+        setPhase("record");
       }
     },
     [choreographyId]
@@ -65,19 +88,20 @@ export default function FeedbackPage() {
           const result = await getFeedbackById(job.result_id);
           setFeedbackResult(result);
           setPhase("results");
+          queryClient.invalidateQueries({ queryKey: ["user-history"] });
         } catch (err) {
           console.error("Failed to fetch feedback:", err);
           setError("Failed to load feedback results. Please try again.");
-          setPhase("upload");
+          setPhase("record");
           completedRef.current = false;
         }
       } else {
         setError("Processing failed. Please try again.");
-        setPhase("upload");
+        setPhase("record");
         completedRef.current = false;
       }
     },
-    []
+    [queryClient]
   );
 
   return (
@@ -100,7 +124,7 @@ export default function FeedbackPage() {
           </Alert>
         )}
 
-        {phase === "upload" && (
+        {phase === "record" && (
           <Card className="border-border shadow-sm">
             <CardHeader>
               <CardTitle className="text-base font-medium">Capture</CardTitle>
@@ -109,6 +133,14 @@ export default function FeedbackPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-6">
+              <Recorder onRecordingComplete={handleRecordingComplete} />
+
+              <div className="flex w-full max-w-md items-center gap-4">
+                <Separator className="flex-1" />
+                <span className="shrink-0 text-xs text-muted-foreground">or</span>
+                <Separator className="flex-1" />
+              </div>
+
               <div className="flex flex-col items-center gap-2">
                 <input
                   ref={fileInputRef}

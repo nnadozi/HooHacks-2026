@@ -5,7 +5,6 @@ import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { usePoseDetection } from "@/hooks/usePoseDetection";
 import { useRecorder } from "@/hooks/useRecorder";
-import { cn } from "@/lib/utils";
 
 interface RecorderProps {
   onRecordingComplete: (blob: Blob) => void;
@@ -34,6 +33,7 @@ export default function Recorder({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poseStartedRef = useRef(false);
+  const notifiedBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     if (videoRef.current && stream) {
@@ -84,7 +84,6 @@ export default function Recorder({
     }
   }, [externalControl, shouldStop, isRecording, stopRecording]);
 
-  const notifiedBlobRef = useRef<Blob | null>(null);
   useEffect(() => {
     if (videoBlob && videoBlob !== notifiedBlobRef.current) {
       notifiedBlobRef.current = videoBlob;

@@ -29,7 +29,7 @@ declare module "@mediapipe/tasks-vision" {
     close(): void;
   }
 
-  export interface WasmFileset {}
+  export type WasmFileset = Record<string, unknown>;
 
   export class FilesetResolver {
     static forVisionTasks(wasmPath: string): Promise<WasmFileset>;

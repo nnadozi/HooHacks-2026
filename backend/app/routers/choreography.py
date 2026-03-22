@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+from datetime import datetime
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, UploadFile
@@ -79,8 +80,20 @@ async def generate_choreography(
             tmp.flush()
             tmp.close()
 
-            frames = extract_keypoints(tmp.name)
-            fps = get_video_fps(tmp.name)
+            try:
+                frames = extract_keypoints(
+                    tmp.name,
+                    ffmpeg_path=settings.FFMPEG_PATH,
+                    model_path=settings.MEDIAPIPE_POSE_MODEL_PATH or None,
+                    model_url=settings.MEDIAPIPE_POSE_MODEL_URL or None,
+                )
+            except ValueError as e:
+                logger.error("Pose extraction failed: %s", e, exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail={"error": str(e), "code": "POSE_EXTRACTION_FAILED"},
+                )
+            fps = get_video_fps(tmp.name, ffmpeg_path=settings.FFMPEG_PATH)
         finally:
             os.unlink(tmp.name)
 
@@ -148,6 +161,7 @@ async def generate_choreography(
                 "difficulty": difficulty,
                 "genre_tags": ["uploaded"],
                 "source_video_uri": file_uri,
+                "created_at": datetime.utcnow(),
             }
             await moves_collection().insert_one(move_doc)
             logger.info("Stored move %s from video (%d frames, %d ms)", move_id, len(frames), duration_ms)
@@ -186,6 +200,9 @@ async def generate_choreography(
         "seed": actual_seed,
         "move_sequence": move_ids,
         "user_id": user_id,
+        "performance_uri": None,
+        "latest_feedback_id": None,
+        "created_at": datetime.utcnow(),
     }
     await choreographies_collection().insert_one(doc)
     logger.info("Created choreography %s with %d moves", choreo_id, len(move_ids))
