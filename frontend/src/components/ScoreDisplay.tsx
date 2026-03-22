@@ -40,7 +40,7 @@ export default function ScoreDisplay({ score, gradeBreakdown }: ScoreDisplayProp
           <p className="mt-1 text-sm text-muted-foreground">out of 100</p>
           <Progress
             value={score}
-            className="mt-4 [&_[data-slot=progress-track]]:h-1.5"
+            className="mt-4 [&_[data-slot=progress-track]]:h-1.5 [&_[data-slot=progress-indicator]]:bg-foreground/30"
           />
         </div>
 

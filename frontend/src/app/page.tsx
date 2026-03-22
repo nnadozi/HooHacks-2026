@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
 import SongList from "@/components/SongList";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -42,6 +43,13 @@ export default function HomePage() {
     songListRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const goToSessions = (tab: "public" | "recent") => {
+    setActiveTab(tab);
+    requestAnimationFrame(() => {
+      songListRef.current?.scrollIntoView({ behavior: "smooth" });
+    });
+  };
+
   const handleGenerate = async () => {
     if (!file) return;
 
@@ -60,20 +68,20 @@ export default function HomePage() {
 
   return (
     <main className="h-screen w-full snap-y snap-mandatory overflow-x-hidden overflow-y-auto scroll-smooth">
-      <div className="flex h-screen w-full shrink-0 snap-start flex-col items-center justify-center p-6">
-        <div className="mb-10 max-w-md text-center">
+      <div className="mx-auto flex h-screen w-full max-w-2xl shrink-0 snap-start flex-col items-center justify-center px-6 py-10">
+        <div className="mb-10 w-full text-center">
           <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            New choreography
+            New routine
           </h1>
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
-            Upload audio or video. Preview the skeleton, record your run, get a score
-            and short notes.
+          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
+            Upload audio or video, preview the skeleton, record your run, then see a
+            score and short notes.
           </p>
         </div>
 
-        <Card className="w-full max-w-lg border-border shadow-sm">
+        <Card className="w-full border-border shadow-sm">
           <CardHeader className="space-y-1">
-            <CardTitle>File</CardTitle>
+            <CardTitle>Upload</CardTitle>
             <CardDescription>
               Audio (common formats) or video (MP4, MOV, WebM).
             </CardDescription>
@@ -85,7 +93,7 @@ export default function HomePage() {
               onClick={() => fileInputRef.current?.click()}
               className={cn(
                 "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted/40 p-9 transition-colors",
-                "hover:border-primary/40 hover:bg-muted/60"
+                "hover:border-muted-foreground/35 hover:bg-muted/60"
               )}
             >
               <input
@@ -133,9 +141,10 @@ export default function HomePage() {
             </div>
 
             {error && (
-              <p className="text-sm text-destructive" role="alert">
-                {error}
-              </p>
+              <Alert variant="destructive" role="alert">
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
 
             <Button
@@ -158,29 +167,39 @@ export default function HomePage() {
               Sessions
               <ChevronDown className="size-4" />
             </Button>
+
             <Button
-              onClick={() => router.push("/editor")}
+              type="button"
               variant="outline"
               className="w-full"
               size="lg"
+              onClick={() => router.push("/editor")}
             >
-              Open Routine Editor
+              Routine editor
             </Button>
 
-            <div className="flex flex-col gap-3 pt-6 border-t border-zinc-800 mt-2">
-              <span className="text-sm text-zinc-400">Or select an existing map:</span>
+            <Separator />
+
+            <div className="space-y-2">
+              <p className="text-center text-xs text-muted-foreground">
+                Jump to sessions
+              </p>
               <div className="flex gap-2">
-                <Button 
-                  onClick={() => handleSelectMap("public")}
-                  className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => goToSessions("public")}
                 >
-                  Public Beatmaps
+                  How it works
                 </Button>
-                <Button 
-                  onClick={() => handleSelectMap("recent")}
-                  className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => goToSessions("recent")}
                 >
-                  Recently Played
+                  Recent
                 </Button>
               </div>
             </div>
@@ -190,9 +209,11 @@ export default function HomePage() {
 
       <div
         ref={songListRef}
-        className="flex h-screen w-full shrink-0 snap-start flex-col justify-center overflow-hidden p-6 sm:px-10"
+        className="flex h-screen w-full shrink-0 snap-start flex-col justify-center overflow-hidden px-6 py-10 sm:px-10"
       >
-        <SongList activeTab={activeTab} onTabChange={setActiveTab} />
+        <div className="mx-auto w-full max-w-4xl">
+          <SongList activeTab={activeTab} onTabChange={setActiveTab} />
+        </div>
       </div>
     </main>
   );

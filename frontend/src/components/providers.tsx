@@ -26,7 +26,7 @@ export default function Providers({ children }: ProvidersProps) {
       attribute="class"
       defaultTheme="dark"
       enableSystem
-      storageKey="justdance-theme"
+      storageKey="remix-theme"
       disableTransitionOnChange
     >
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

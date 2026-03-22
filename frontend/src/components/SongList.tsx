@@ -114,7 +114,7 @@ export default function SongList({
         }}
         className="flex min-h-0 flex-1 flex-col gap-4"
       >
-        <TabsList className="h-9 w-full max-w-sm shrink-0 rounded-lg p-1">
+        <TabsList className="h-9 w-full max-w-sm shrink-0 rounded-lg bg-muted/80 p-1">
           <TabsTrigger value="public" className="flex-1 rounded-md text-sm">
             How it works
           </TabsTrigger>
@@ -137,7 +137,7 @@ export default function SongList({
               Open{" "}
               <button
                 type="button"
-                className="font-medium text-primary underline-offset-4 hover:underline"
+                className="font-medium text-foreground underline-offset-4 hover:underline"
                 onClick={() => onTabChange?.("recent")}
               >
                 Recent
