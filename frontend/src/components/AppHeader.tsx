@@ -17,22 +17,24 @@ export default function AppHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/80 bg-background/85 shadow-[0_1px_0_0_color-mix(in_oklch,var(--primary)_8%,transparent)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-8">
+      <div className="flex h-14 w-full items-center justify-between gap-4 px-4 sm:px-8">
         <Link
           href="/"
-          className="group flex items-center gap-2.5 outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md"
+          className="flex shrink-0 items-center gap-1.5 outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
         >
-          <span
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-[13px] font-bold tracking-tight text-primary-foreground shadow-md shadow-primary/30"
-            aria-hidden
-          >
-            R
-          </span>
-          <span className="font-heading text-lg font-bold tracking-[-0.03em] text-foreground">
+          <img
+            src="/logo.png"
+            alt=""
+            width={48}
+            height={32}
+            decoding="async"
+            className="block h-8 w-auto max-h-8 shrink-0 object-contain"
+          />
+          <span className="font-heading text-base font-bold tracking-[-0.03em] text-foreground">
             Remix
           </span>
         </Link>
-        <div className="flex items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5">
           <nav className="flex items-center" aria-label="Main">
             {nav.map((item) => {
               const active =
