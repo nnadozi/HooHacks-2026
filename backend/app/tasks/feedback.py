@@ -17,6 +17,33 @@ from app.worker import celery_app
 
 logger = logging.getLogger("justdance.tasks.feedback")
 
+def _spread_sample(frames: list[dict], max_items: int) -> list[dict]:
+    """Pick up to max_items frames spread across the full list (deterministic)."""
+    if max_items <= 0 or not frames:
+        return []
+    if len(frames) <= max_items:
+        return frames
+
+    # Evenly spaced indices from [0, len-1]
+    step = (len(frames) - 1) / (max_items - 1)
+    indices = [int(round(i * step)) for i in range(max_items)]
+
+    # De-dupe while preserving order, then top up if rounding collapsed indices.
+    seen: set[int] = set()
+    picked: list[dict] = []
+    for idx in indices:
+        if idx not in seen:
+            seen.add(idx)
+            picked.append(frames[idx])
+    if len(picked) < max_items:
+        for idx in range(len(frames)):
+            if idx not in seen:
+                picked.append(frames[idx])
+                if len(picked) == max_items:
+                    break
+
+    return picked
+
 
 @celery_app.task(name="tasks.analyze_performance")
 def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> None:
@@ -92,7 +119,7 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
         # Generate critiques via Gemini (limit to avoid excessive API calls)
         critiques = []
         if frames_for_gemini:
-            sample = frames_for_gemini[:20]
+            sample = _spread_sample(frames_for_gemini, 20)
             logger.info("Sending %d frames to Gemini for critique", len(sample))
             try:
                 critiques = generate_critiques(sample)
