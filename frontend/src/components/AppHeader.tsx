@@ -20,19 +20,16 @@ export default function AppHeader() {
       <div className="flex h-14 w-full items-center justify-between gap-4 px-4 sm:px-8">
         <Link
           href="/"
-          className="flex shrink-0 items-center gap-1.5 outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
+          className="flex shrink-0 items-center gap-0 outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
         >
           <img
             src="/logo.png"
             alt=""
-            width={48}
-            height={32}
+         
+            height={130}
             decoding="async"
-            className="block h-8 w-auto max-h-8 shrink-0 object-contain"
+            className="block h-14 w-auto max-h-14 shrink-0 object-contain"
           />
-          <span className="font-heading text-base font-bold tracking-[-0.03em] text-foreground">
-            Remix
-          </span>
         </Link>
         <div className="flex shrink-0 items-center gap-0.5">
           <nav className="flex items-center" aria-label="Main">
