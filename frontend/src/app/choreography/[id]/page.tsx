@@ -20,12 +20,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   analyzeFeedback,
   getChoreographyPreview,
+  getVideoServeUrl,
   regenerateChoreography,
 } from "@/lib/api";
 import type { Keypoint } from "@/types";
 
 const ACCEPTED_VIDEO_TYPES = "video/mp4,video/quicktime,video/webm";
-const COUNTDOWN_SECONDS = 3;
+const COUNTDOWN_SECONDS = 5;
 
 type PageMode = "preview" | "countdown" | "recording" | "submitting";
 
@@ -195,6 +196,120 @@ export default function ChoreographyPage() {
     );
   }
 
+  // Full-screen recording view
+  if (isRecordingFlow && preview) {
+    return (
+      <main className="flex h-[calc(100vh-3.5rem)] flex-col bg-background">
+        {/* Top bar */}
+        <div className="flex items-center justify-between border-b border-border px-4 py-2">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium">
+              {preview.bpm} BPM · {preview.difficulty} · {preview.moves.length} moves
+            </span>
+            {mode === "recording" && (
+              <span className="flex items-center gap-2 text-sm font-medium text-destructive">
+                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
+                Recording
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {(mode === "countdown" || mode === "recording") && (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={handleCancelRecording}
+              >
+                Cancel
+              </Button>
+            )}
+            {mode === "recording" && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setIsPlaying(false);
+                  setMode("submitting");
+                }}
+              >
+                Stop & Submit
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Side-by-side panels filling remaining height */}
+        <div className="flex flex-1 gap-1 overflow-hidden p-1">
+          {/* Skeleton preview panel */}
+          <div className="flex flex-1 flex-col gap-1">
+            <h3 className="px-2 text-xs font-medium text-muted-foreground">Follow Along</h3>
+            <div className="relative flex-1 overflow-hidden rounded-lg border border-border">
+              {/* Source video behind the skeleton */}
+              {sourceVideoUrl && (
+                <video
+                  ref={(el) => {
+                    videoRef.current = el;
+                    setVideoElement(el);
+                  }}
+                  src={sourceVideoUrl}
+                  muted
+                  playsInline
+                  loop
+                  className="absolute inset-0 h-full w-full rounded-lg object-fill opacity-40"
+                />
+              )}
+              <SkeletonCanvas
+                frames={allFrames}
+                fps={30}
+                isPlaying={isPlaying}
+                overlay
+                videoElement={videoElement}
+              />
+
+              {/* Countdown overlay */}
+              {mode === "countdown" && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/60">
+                  <span className="text-8xl font-bold text-primary animate-pulse">
+                    {countdown}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Webcam panel */}
+          <div className="flex flex-1 flex-col gap-1">
+            <h3 className="px-2 text-xs font-medium text-muted-foreground">Your Camera</h3>
+            <div className="relative flex-1 overflow-hidden rounded-lg border border-border bg-muted/30">
+              <Recorder
+                onRecordingComplete={handleRecordingComplete}
+                externalControl
+                shouldStart={mode === "recording"}
+                shouldStop={mode === "submitting"}
+              />
+
+              {/* Countdown overlay on webcam */}
+              {mode === "countdown" && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/60">
+                  <span className="text-5xl font-bold text-white">Get Ready!</span>
+                </div>
+              )}
+
+              {/* Submitting overlay */}
+              {mode === "submitting" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-lg bg-black/70">
+                  <div className="size-10 animate-spin rounded-full border-2 border-muted border-t-foreground/30" />
+                  <span className="text-sm text-muted-foreground">Submitting performance…</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-[calc(100vh-3.5rem)] bg-background px-4 py-8 sm:px-8 sm:py-10">
       <div className="mx-auto flex max-w-4xl flex-col gap-8">
@@ -218,11 +333,30 @@ export default function ChoreographyPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-6">
-              <div className="overflow-hidden rounded-lg border border-border">
+              <div
+                className="relative overflow-hidden rounded-lg border border-border"
+                style={{ width: 640, height: 480 }}
+              >
+                {/* Source video behind the skeleton */}
+                {sourceVideoUrl && (
+                  <video
+                    ref={(el) => {
+                      videoRef.current = el;
+                      setVideoElement(el);
+                    }}
+                    src={sourceVideoUrl}
+                    muted
+                    playsInline
+                    loop
+                    className="absolute inset-0 h-full w-full rounded-lg object-fill opacity-40"
+                  />
+                )}
                 <SkeletonCanvas
                   frames={allFrames}
                   fps={30}
                   isPlaying={isPlaying}
+                  overlay={!!sourceVideoUrl}
+                  videoElement={videoElement}
                 />
               </div>
 
@@ -257,7 +391,10 @@ export default function ChoreographyPage() {
                 <Button
                   type="button"
                   size="lg"
-                  onClick={() => router.push(`/feedback/${id}`)}
+                  onClick={() => {
+                    setIsPlaying(false);
+                    startCountdown();
+                  }}
                 >
                   Record
                 </Button>

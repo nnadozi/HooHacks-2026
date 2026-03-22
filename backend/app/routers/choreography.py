@@ -247,13 +247,14 @@ async def get_preview(choreo_id: str):
     for move_id in choreo["move_sequence"]:
         move = await moves_collection().find_one({"_id": move_id})
         if move:
-            moves.append(
-                {
-                    "id": move["_id"],
-                    "keypoints": move["keypoints"],
-                    "duration_ms": move["duration_ms"],
-                }
-            )
+            move_data = {
+                "id": move["_id"],
+                "keypoints": move["keypoints"],
+                "duration_ms": move["duration_ms"],
+            }
+            if move.get("source_video_uri"):
+                move_data["source_video_uri"] = move["source_video_uri"]
+            moves.append(move_data)
 
     logger.info("Preview for %s: %d moves loaded", choreo_id, len(moves))
 

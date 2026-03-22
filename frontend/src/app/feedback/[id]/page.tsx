@@ -15,8 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { analyzeFeedback, getUserHistory } from "@/lib/api";
+import { analyzeFeedback, getFeedbackById } from "@/lib/api";
 import type { FeedbackResult, JobStatus } from "@/types";
 
 const ACCEPTED_VIDEO_TYPES = "video/mp4,video/quicktime,video/webm";
@@ -31,6 +30,7 @@ export default function FeedbackPage() {
   const [phase, setPhase] = useState<"upload" | "uploading" | "polling" | "results">(
     initialJobId ? "polling" : "upload"
   );
+  const completedRef = useRef(false);
   const [jobId, setJobId] = useState<string | null>(initialJobId);
   const [feedbackResult, setFeedbackResult] = useState<FeedbackResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,18 +57,24 @@ export default function FeedbackPage() {
 
   const handleJobComplete = useCallback(
     async (job: JobStatus) => {
+      if (completedRef.current) return;
+      completedRef.current = true;
+
       if (job.status === "done" && job.result_id) {
         try {
           const result = await getFeedbackById(job.result_id);
           setFeedbackResult(result);
           setPhase("results");
-        } catch {
+        } catch (err) {
+          console.error("Failed to fetch feedback:", err);
           setError("Failed to load feedback results. Please try again.");
           setPhase("upload");
+          completedRef.current = false;
         }
       } else {
         setError("Processing failed. Please try again.");
         setPhase("upload");
+        completedRef.current = false;
       }
     },
     []
@@ -94,7 +100,7 @@ export default function FeedbackPage() {
           </Alert>
         )}
 
-        {phase === "record" && (
+        {phase === "upload" && (
           <Card className="border-border shadow-sm">
             <CardHeader>
               <CardTitle className="text-base font-medium">Capture</CardTitle>
@@ -103,14 +109,6 @@ export default function FeedbackPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-6">
-              <Recorder onRecordingComplete={handleRecordingComplete} />
-
-              <div className="flex w-full max-w-md items-center gap-4">
-                <Separator className="flex-1" />
-                <span className="shrink-0 text-xs text-muted-foreground">or</span>
-                <Separator className="flex-1" />
-              </div>
-
               <div className="flex flex-col items-center gap-2">
                 <input
                   ref={fileInputRef}
@@ -160,11 +158,7 @@ export default function FeedbackPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setPhase("record");
-                  setFeedbackResult(null);
-                  setJobId(null);
-                }}
+                onClick={() => router.push(`/choreography/${choreographyId}`)}
               >
                 Again
               </Button>
