@@ -153,7 +153,7 @@ export default function PracticePlayer({
   const active = kind === "choreography" ? choreoQuery : routineQuery;
 
   return (
-    <Card className="border-border shadow-sm">
+    <Card className="flex h-full flex-col border-border shadow-sm">
       <CardHeader className="gap-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -243,7 +243,7 @@ export default function PracticePlayer({
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-col items-center gap-4">
+      <CardContent className="flex min-h-0 flex-1 flex-col items-stretch gap-4">
         {active.isLoading && (
           <div className="flex items-center gap-2 py-14 text-sm text-muted-foreground">
             <Loader2 className="size-5 animate-spin" />
@@ -264,69 +264,70 @@ export default function PracticePlayer({
         )}
 
         {!active.isLoading && !active.isError && frames.length > 0 && (
-          <div className="w-full">
-            {sourceVideoUrl ? (
-              <div className="relative overflow-hidden rounded-xl border border-border bg-black">
-                <video
-                  ref={(el) => {
-                    videoRef.current = el;
-                    setVideoElement(el);
-                  }}
-                  src={sourceVideoUrl}
-                  controls
-                  playsInline
-                  className="block aspect-video w-full object-cover"
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onEnded={() => setIsPlaying(false)}
-                  onLoadedMetadata={(e) => {
-                    const v = e.currentTarget;
-                    if (v.videoWidth > 0 && v.videoHeight > 0) {
-                      setOverlayDims({ width: v.videoWidth, height: v.videoHeight });
-                    }
-                    if (v.duration && isFinite(v.duration) && frames.length > 0) {
+          <div className="flex w-full flex-1 min-h-0 flex-col">
+            <div className="relative w-full flex-1 min-h-0 overflow-hidden rounded-xl border border-border bg-black">
+              {sourceVideoUrl ? (
+                <>
+                  <video
+                    ref={(el) => {
+                      videoRef.current = el;
+                      setVideoElement(el);
+                    }}
+                    src={sourceVideoUrl}
+                    controls
+                    playsInline
+                    className="absolute inset-0 h-full w-full object-contain"
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => setIsPlaying(false)}
+                    onLoadedMetadata={(e) => {
+                      const v = e.currentTarget;
+                      if (v.videoWidth > 0 && v.videoHeight > 0) {
+                        setOverlayDims({ width: v.videoWidth, height: v.videoHeight });
+                      }
+                      if (v.duration && isFinite(v.duration) && frames.length > 0) {
+                        const idx = Math.min(
+                          frames.length - 1,
+                          Math.max(0, Math.floor((v.currentTime / v.duration) * frames.length))
+                        );
+                        reportFrameIndex(idx);
+                      }
+                    }}
+                    onTimeUpdate={(e) => {
+                      const v = e.currentTarget;
+                      if (!v.duration || !isFinite(v.duration) || frames.length === 0) return;
                       const idx = Math.min(
                         frames.length - 1,
                         Math.max(0, Math.floor((v.currentTime / v.duration) * frames.length))
                       );
                       reportFrameIndex(idx);
-                    }
-                  }}
-                  onTimeUpdate={(e) => {
-                    const v = e.currentTarget;
-                    if (!v.duration || !isFinite(v.duration) || frames.length === 0) return;
-                    const idx = Math.min(
-                      frames.length - 1,
-                      Math.max(0, Math.floor((v.currentTime / v.duration) * frames.length))
-                    );
-                    reportFrameIndex(idx);
-                  }}
-                  onSeeked={(e) => {
-                    const v = e.currentTarget;
-                    if (!v.duration || !isFinite(v.duration) || frames.length === 0) return;
-                    const idx = Math.min(
-                      frames.length - 1,
-                      Math.max(0, Math.floor((v.currentTime / v.duration) * frames.length))
-                    );
-                    reportFrameIndex(idx);
-                  }}
-                />
-                <div className="pointer-events-none absolute inset-0">
-                  <SkeletonCanvas
-                    key={canvasKey}
-                    frames={frames}
-                    fps={BASE_FPS}
-                    isPlaying={isPlaying}
-                    overlay
-                    videoElement={videoElement}
-                    onFrameChange={reportFrameIndex}
-                    width={overlayDims.width}
-                    height={overlayDims.height}
+                    }}
+                    onSeeked={(e) => {
+                      const v = e.currentTarget;
+                      if (!v.duration || !isFinite(v.duration) || frames.length === 0) return;
+                      const idx = Math.min(
+                        frames.length - 1,
+                        Math.max(0, Math.floor((v.currentTime / v.duration) * frames.length))
+                      );
+                      reportFrameIndex(idx);
+                    }}
                   />
-                </div>
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-xl border border-border">
+                  <div className="pointer-events-none absolute inset-0">
+                    <SkeletonCanvas
+                      key={canvasKey}
+                      frames={frames}
+                      fps={BASE_FPS}
+                      isPlaying={isPlaying}
+                      overlay
+                      fitMode="contain"
+                      videoElement={videoElement}
+                      onFrameChange={reportFrameIndex}
+                      width={overlayDims.width}
+                      height={overlayDims.height}
+                    />
+                  </div>
+                </>
+              ) : (
                 <SkeletonCanvas
                   key={canvasKey}
                   frames={frames}
@@ -335,10 +336,10 @@ export default function PracticePlayer({
                   onFrameChange={reportFrameIndex}
                   width={1280}
                   height={720}
-                  className="h-auto w-full aspect-video"
+                  className="h-full w-full rounded-none border-0 bg-transparent shadow-none"
                 />
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </CardContent>

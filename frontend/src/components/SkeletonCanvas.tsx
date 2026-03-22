@@ -25,6 +25,10 @@ interface SkeletonCanvasProps {
   frames: Keypoint[][];
   fps: number;
   isPlaying: boolean;
+  /**
+   * The source (unscaled) dimensions of the keypoint frames, used to preserve
+   * aspect ratio when `fitMode` is `contain`/`cover`.
+   */
   width?: number;
   height?: number;
   className?: string;
@@ -34,6 +38,13 @@ interface SkeletonCanvasProps {
   onFrameChange?: (frameIndex: number) => void;
   /** Optional video element to sync frame index to video currentTime */
   videoElement?: HTMLVideoElement | null;
+  /**
+   * How to map normalized keypoints into the canvas area.
+   * - `fill`: stretch to canvas (matches `object-fill`)
+   * - `contain`: preserve aspect ratio with letterboxing (matches `object-contain`)
+   * - `cover`: preserve aspect ratio with cropping (matches `object-cover`)
+   */
+  fitMode?: "fill" | "contain" | "cover";
 }
 
 export default function SkeletonCanvas({
@@ -46,10 +57,45 @@ export default function SkeletonCanvas({
   overlay = false,
   onFrameChange,
   videoElement,
+  fitMode = "fill",
 }: SkeletonCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameIndexRef = useRef(0);
   const lastTimeRef = useRef(0);
+  const sizeRef = useRef<{ cssW: number; cssH: number; dpr: number }>({
+    cssW: width,
+    cssH: height,
+    dpr: 1,
+  });
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = Math.max(1, rect.width);
+      const cssH = Math.max(1, rect.height);
+      sizeRef.current = { cssW, cssH, dpr };
+
+      const nextW = Math.max(1, Math.round(cssW * dpr));
+      const nextH = Math.max(1, Math.round(cssH * dpr));
+      if (canvas.width !== nextW) canvas.width = nextW;
+      if (canvas.height !== nextH) canvas.height = nextH;
+    };
+
+    resize();
+    resizeObserverRef.current?.disconnect();
+    resizeObserverRef.current = new ResizeObserver(resize);
+    resizeObserverRef.current.observe(canvas);
+
+    return () => {
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isPlaying || frames.length === 0) return;
@@ -66,6 +112,10 @@ export default function SkeletonCanvas({
     let animId: number;
 
     const draw = (timestamp: number) => {
+      const { cssW, cssH, dpr } = sizeRef.current;
+      // Draw in CSS pixels for easier fit calculations.
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
       if (videoElement && videoElement.duration && isFinite(videoElement.duration)) {
         // Sync frame index to video currentTime
         const progress = videoElement.currentTime / videoElement.duration;
@@ -88,11 +138,30 @@ export default function SkeletonCanvas({
       }
 
       const frame = frames[frameIndexRef.current];
-      ctx.clearRect(0, 0, width, height);
+      ctx.clearRect(0, 0, cssW, cssH);
 
       if (!frame || frame.length === 0) {
         animId = requestAnimationFrame(draw);
         return;
+      }
+
+      const srcW = videoElement?.videoWidth || width;
+      const srcH = videoElement?.videoHeight || height;
+
+      let scaleX = cssW;
+      let scaleY = cssH;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (fitMode !== "fill" && srcW > 0 && srcH > 0) {
+        const scale =
+          fitMode === "cover"
+            ? Math.max(cssW / srcW, cssH / srcH)
+            : Math.min(cssW / srcW, cssH / srcH);
+        scaleX = srcW * scale;
+        scaleY = srcH * scale;
+        offsetX = (cssW - scaleX) / 2;
+        offsetY = (cssH - scaleY) / 2;
       }
 
       // Bones / joints: neutral + accent (avoid a second “brand” blue on canvas)
@@ -109,8 +178,8 @@ export default function SkeletonCanvas({
         if (pa.visibility < 0.5 || pb.visibility < 0.5) continue;
 
         ctx.beginPath();
-        ctx.moveTo(pa.x * width, pa.y * height);
-        ctx.lineTo(pb.x * width, pb.y * height);
+        ctx.moveTo(offsetX + pa.x * scaleX, offsetY + pa.y * scaleY);
+        ctx.lineTo(offsetX + pb.x * scaleX, offsetY + pb.y * scaleY);
         ctx.stroke();
       }
 
@@ -118,32 +187,30 @@ export default function SkeletonCanvas({
       for (const kp of frame) {
         if (kp.visibility < 0.5) continue;
         ctx.beginPath();
-        ctx.arc(kp.x * width, kp.y * height, 5, 0, Math.PI * 2);
+        ctx.arc(offsetX + kp.x * scaleX, offsetY + kp.y * scaleY, 5, 0, Math.PI * 2);
         ctx.fill();
       }
 
+      // Reset shadow so it doesn't affect other callers sharing the context.
+      if (overlay) {
+        ctx.shadowBlur = 0;
+      }
       animId = requestAnimationFrame(draw);
     };
 
     animId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animId);
-  }, [frames, fps, isPlaying, width, height, overlay, onFrameChange, videoElement]);
+  }, [frames, fps, isPlaying, width, height, overlay, onFrameChange, videoElement, fitMode]);
 
   return (
     <canvas
       ref={canvasRef}
-      width={width}
-      height={height}
       className={cn(
         overlay
           ? "h-full w-full rounded-xl bg-transparent"
-          : {
-        overlay
-          ? "pointer-events-none absolute left-0 top-0 h-full w-full rounded-lg"
           : "rounded-xl border border-border bg-card/80 shadow-inner",
         className
       )}
-      }
     />
   );
 }

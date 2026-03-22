@@ -138,6 +138,7 @@ export default function LiveSkeletonCamera({
       try {
         setCanvasToVideoRect(video, canvas);
         await startPose(video, canvas, {
+          fitMode: "contain",
           onLandmarks: (landmarks) => {
             const base = baselineRef.current;
             if (!base || base.length === 0 || landmarks.length === 0) {
@@ -187,21 +188,21 @@ export default function LiveSkeletonCamera({
   }, [startPose, stream]);
 
   return (
-    <Card className="border-border shadow-sm">
+    <Card className="flex h-full flex-col border-border shadow-sm">
       <CardHeader className="gap-1">
         <CardTitle className="text-base font-medium">Your camera</CardTitle>
         <CardDescription>
           Live skeleton overlay{isReady ? "" : isStarting ? " (starting…)" : ""}.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col items-center gap-3">
-        <div className="relative w-full overflow-hidden rounded-xl border border-border bg-muted/20">
+      <CardContent className="flex min-h-0 flex-1 flex-col items-stretch gap-3">
+        <div className="relative w-full flex-1 min-h-0 overflow-hidden rounded-xl border border-border bg-black">
           <video
             ref={videoRef}
             autoPlay
             muted
             playsInline
-            className="aspect-video w-full object-cover"
+            className="absolute inset-0 h-full w-full object-contain"
           />
           <canvas
             ref={canvasRef}

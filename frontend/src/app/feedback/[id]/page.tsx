@@ -2,6 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import FeedbackPanel from "@/components/FeedbackPanel";
 import JobPoller from "@/components/JobPoller";
@@ -18,7 +19,6 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { analyzeFeedback, getFeedbackById } from "@/lib/api";
-import { analyzeFeedback, getFeedbackById } from "@/lib/api";
 import type { FeedbackResult, JobStatus } from "@/types";
 
 const ACCEPTED_VIDEO_TYPES = "video/mp4,video/quicktime,video/webm";
@@ -27,6 +27,7 @@ export default function FeedbackPage() {
   const { id: choreographyId } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initialJobId = searchParams.get("job_id");
@@ -87,6 +88,7 @@ export default function FeedbackPage() {
           const result = await getFeedbackById(job.result_id);
           setFeedbackResult(result);
           setPhase("results");
+          queryClient.invalidateQueries({ queryKey: ["user-history"] });
         } catch (err) {
           console.error("Failed to fetch feedback:", err);
           setError("Failed to load feedback results. Please try again.");
@@ -99,7 +101,7 @@ export default function FeedbackPage() {
         completedRef.current = false;
       }
     },
-    []
+    [queryClient]
   );
 
   return (
@@ -122,7 +124,7 @@ export default function FeedbackPage() {
           </Alert>
         )}
 
-        {phase === "upload" && (
+        {phase === "record" && (
           <Card className="border-border shadow-sm">
             <CardHeader>
               <CardTitle className="text-base font-medium">Capture</CardTitle>
@@ -131,6 +133,14 @@ export default function FeedbackPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-6">
+              <Recorder onRecordingComplete={handleRecordingComplete} />
+
+              <div className="flex w-full max-w-md items-center gap-4">
+                <Separator className="flex-1" />
+                <span className="shrink-0 text-xs text-muted-foreground">or</span>
+                <Separator className="flex-1" />
+              </div>
+
               <div className="flex flex-col items-center gap-2">
                 <input
                   ref={fileInputRef}

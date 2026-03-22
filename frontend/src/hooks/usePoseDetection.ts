@@ -21,7 +21,11 @@ interface UsePoseDetectionReturn {
   start: (
     video: HTMLVideoElement,
     canvas: HTMLCanvasElement,
-    options?: { onLandmarks?: (landmarks: Landmark[]) => void }
+    options?: {
+      onLandmarks?: (landmarks: Landmark[]) => void;
+      /** Must match how the <video> is visually fit into the canvas area. */
+      fitMode?: "cover" | "contain";
+    }
   ) => Promise<void>;
   stop: () => void;
   isReady: boolean;
@@ -36,7 +40,10 @@ export function usePoseDetection(): UsePoseDetectionReturn {
   const start = useCallback(async (
     video: HTMLVideoElement,
     canvas: HTMLCanvasElement,
-    options?: { onLandmarks?: (landmarks: Landmark[]) => void }
+    options?: {
+      onLandmarks?: (landmarks: Landmark[]) => void;
+      fitMode?: "cover" | "contain";
+    }
   ) => {
     const mod = await import("@mediapipe/tasks-vision");
 
@@ -80,32 +87,65 @@ export function usePoseDetection(): UsePoseDetectionReturn {
           const cw = canvas.width;
           const ch = canvas.height;
 
-          // Compute object-cover transform to map landmark coords to canvas
-          // Video native aspect vs canvas (display) aspect
+          // Map normalized landmark coords to the visible canvas region.
+          // Must match the video's CSS object-fit.
           const videoAspect = video.videoWidth / video.videoHeight;
           const canvasAspect = cw / ch;
-          let sx: number, sy: number, ox: number, oy: number;
+          const fitMode = options?.fitMode ?? "cover";
 
-          if (videoAspect > canvasAspect) {
-            // Video is wider — cropped on sides
-            const visibleFraction = canvasAspect / videoAspect;
-            const cropOffset = (1 - visibleFraction) / 2;
-            sx = cw / visibleFraction;
-            sy = ch;
-            ox = -cropOffset * sx;
-            oy = 0;
+          let mapX: (x: number) => number;
+          let mapY: (y: number) => number;
+          if (fitMode === "contain") {
+            // Letterbox (no cropping)
+            let scaledW: number;
+            let scaledH: number;
+            let ox: number;
+            let oy: number;
+
+            if (videoAspect > canvasAspect) {
+              // Wider than canvas: full width, letterbox top/bottom
+              scaledW = cw;
+              scaledH = cw / videoAspect;
+              ox = 0;
+              oy = (ch - scaledH) / 2;
+            } else {
+              // Taller than canvas: full height, letterbox left/right
+              scaledH = ch;
+              scaledW = ch * videoAspect;
+              ox = (cw - scaledW) / 2;
+              oy = 0;
+            }
+
+            mapX = (x: number) => ox + x * scaledW;
+            mapY = (y: number) => oy + y * scaledH;
           } else {
-            // Video is taller — cropped on top/bottom
-            const visibleFraction = videoAspect / canvasAspect;
-            const cropOffset = (1 - visibleFraction) / 2;
-            sx = cw;
-            sy = ch / visibleFraction;
-            ox = 0;
-            oy = -cropOffset * sy;
-          }
+            // Cover (cropping)
+            let sx: number;
+            let sy: number;
+            let ox: number;
+            let oy: number;
 
-          const mapX = (x: number) => ox + x * sx;
-          const mapY = (y: number) => oy + y * sy;
+            if (videoAspect > canvasAspect) {
+              // Video is wider — cropped on sides
+              const visibleFraction = canvasAspect / videoAspect;
+              const cropOffset = (1 - visibleFraction) / 2;
+              sx = cw / visibleFraction;
+              sy = ch;
+              ox = -cropOffset * sx;
+              oy = 0;
+            } else {
+              // Video is taller — cropped on top/bottom
+              const visibleFraction = videoAspect / canvasAspect;
+              const cropOffset = (1 - visibleFraction) / 2;
+              sx = cw;
+              sy = ch / visibleFraction;
+              ox = 0;
+              oy = -cropOffset * sy;
+            }
+
+            mapX = (x: number) => ox + x * sx;
+            mapY = (y: number) => oy + y * sy;
+          }
 
           // Draw bone glow (wider, semi-transparent underneath)
           ctx.strokeStyle = "rgba(34, 211, 238, 0.4)";

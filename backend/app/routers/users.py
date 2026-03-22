@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from app.db import feedback_collection
+from app.db import choreographies_collection, feedback_collection, moves_collection
 
 router = APIRouter()
 
@@ -15,6 +15,28 @@ async def get_history():
 
     results = []
     async for doc in cursor:
+        # Only return sessions that still have a valid choreography with at least
+        # one move present. Otherwise the frontend shows sessions that can't be
+        # practiced/previewed (e.g. moves deleted in Mongo).
+        choreo_id = doc.get("choreography_id")
+        if not choreo_id:
+            continue
+        choreo = await choreographies_collection().find_one(
+            {"_id": choreo_id},
+            projection={"_id": 1, "move_sequence": 1},
+        )
+        if not choreo:
+            continue
+        move_sequence = choreo.get("move_sequence") or []
+        if not move_sequence:
+            continue
+        any_move = await moves_collection().find_one(
+            {"_id": {"$in": move_sequence}},
+            projection={"_id": 1},
+        )
+        if not any_move:
+            continue
+
         results.append(
             {
                 "id": doc["_id"],
