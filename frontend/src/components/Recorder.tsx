@@ -83,6 +83,7 @@ export default function Recorder({
     }
   }, [externalControl, shouldStop, isRecording, stopRecording]);
 
+  const notifiedBlobRef = useRef<Blob | null>(null);
   useEffect(() => {
     if (videoBlob && videoBlob !== notifiedBlobRef.current) {
       notifiedBlobRef.current = videoBlob;
@@ -93,49 +94,41 @@ export default function Recorder({
   }, [videoBlob, onRecordingComplete, stopCamera]);
 
   return (
-    <div className="flex w-full max-w-[640px] flex-col items-center gap-4">
-      <div
-        className={cn(
-          "relative w-full overflow-hidden rounded-lg border bg-muted/30",
-          isRecording ? "border-destructive/40" : "border-border"
-        )}
-      >
+    <div className="absolute inset-0 flex flex-col items-center">
+      <div className="relative h-full w-full">
         <video
           ref={videoRef}
           autoPlay
           muted
           playsInline
-          className="aspect-video w-full object-cover"
+          className="absolute inset-0 h-full w-full rounded-lg object-cover"
+          style={{ transform: "scaleX(-1)" }}
         />
-        {isRecording && (
-          <div className="pointer-events-none absolute left-2 top-2 rounded bg-destructive px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-            Rec
-          </div>
-        )}
+        <canvas
+          ref={canvasRef}
+          className="pointer-events-none absolute inset-0 h-full w-full rounded-lg"
+          style={{ transform: "scaleX(-1)" }}
+        />
       </div>
 
       {error && (
-        <p className="text-center text-sm text-destructive" role="alert">
+        <p className="absolute bottom-2 text-center text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
 
-      <div className="flex gap-2">
-        {!isRecording ? (
-          <Button onClick={startRecording} size="lg">
-            Start
-          </Button>
-        ) : (
-          <Button onClick={stopRecording} variant="destructive" size="lg">
-            Stop
-          </Button>
-        )}
-      </div>
-
-      {videoBlob && (
-        <p className="text-center text-xs text-muted-foreground">
-          {(videoBlob.size / 1024 / 1024).toFixed(1)} MB
-        </p>
+      {!externalControl && (
+        <div className="absolute bottom-4 flex gap-2">
+          {!isRecording ? (
+            <Button onClick={startRecording} size="lg">
+              Start
+            </Button>
+          ) : (
+            <Button onClick={stopRecording} variant="destructive" size="lg">
+              Stop
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );

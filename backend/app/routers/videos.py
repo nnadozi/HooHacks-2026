@@ -1,10 +1,13 @@
 import logging
+import os
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from app.config import get_settings
 from app.db import jobs_collection
+from app.services.storage import download_to_temp
 from app.tasks.ingest import ingest_video
 
 logger = logging.getLogger("justdance.videos")
@@ -76,3 +79,29 @@ async def upload_video(file: UploadFile):
     logger.info("Enqueued ingest task for job %s", job_id)
 
     return {"job_id": job_id}
+
+
+@router.get("/serve")
+async def serve_video(uri: str):
+    """Proxy a video file from GCS for browser playback."""
+    if not uri.startswith("gs://"):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Invalid URI format", "code": "INVALID_FORMAT"},
+        )
+
+    try:
+        tmp_path = download_to_temp(uri)
+    except Exception as e:
+        logger.error("Failed to download video: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Failed to retrieve video", "code": "STORAGE_ERROR"},
+        )
+
+    # Determine media type from extension
+    ext = os.path.splitext(tmp_path)[1].lower()
+    media_types = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm"}
+    media_type = media_types.get(ext, "video/mp4")
+
+    return FileResponse(tmp_path, media_type=media_type)

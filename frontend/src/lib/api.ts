@@ -100,6 +100,11 @@ export async function getUserHistory(): Promise<{ history: FeedbackResult[] }> {
   return res.json();
 }
 
+export async function getFeedbackById(feedbackId: string): Promise<FeedbackResult> {
+  const res = await apiFetch(`/api/users/feedback/${feedbackId}`);
+  return res.json();
+}
+
 export async function listMoves(params?: {
   difficulty?: "easy" | "medium" | "hard";
   genre_tag?: string;

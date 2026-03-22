@@ -131,7 +131,11 @@ export default function SkeletonCanvas({
       ref={canvasRef}
       width={width}
       height={height}
-      className="rounded-xl border border-border bg-card/80 shadow-inner"
+      className={
+        overlay
+          ? "pointer-events-none absolute left-0 top-0 h-full w-full rounded-lg"
+          : "rounded-xl border border-border bg-card/80 shadow-inner"
+      }
     />
   );
 }
