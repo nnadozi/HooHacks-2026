@@ -115,6 +115,15 @@ export default function HomePage() {
               {isLoading ? "Generating..." : "Generate Choreography"}
             </Button>
 
+            <Button
+              onClick={() => router.push("/editor")}
+              variant="outline"
+              className="w-full"
+              size="lg"
+            >
+              Open Routine Editor
+            </Button>
+
             <div className="flex flex-col gap-3 pt-6 border-t border-zinc-800 mt-2">
               <span className="text-sm text-zinc-400">Or select an existing map:</span>
               <div className="flex gap-2">
