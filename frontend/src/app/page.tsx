@@ -19,12 +19,19 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const songListRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState<"public" | "recent">("public");
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) setFile(droppedFile);
   }, []);
+
+  const handleSelectMap = (tab: "public" | "recent") => {
+    setActiveTab(tab);
+    songListRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   const handleGenerate = async () => {
     if (!file) return;
@@ -107,13 +114,34 @@ export default function HomePage() {
             >
               {isLoading ? "Generating..." : "Generate Choreography"}
             </Button>
+
+            <div className="flex flex-col gap-3 pt-6 border-t border-zinc-800 mt-2">
+              <span className="text-sm text-zinc-400">Or select an existing map:</span>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => handleSelectMap("public")}
+                  className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+                >
+                  Public Beatmaps
+                </Button>
+                <Button 
+                  onClick={() => handleSelectMap("recent")}
+                  className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+                >
+                  Recently Played
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Bottom section: Song List bounded on the left */}
-      <div className="h-screen w-full flex flex-col justify-center items-start px-12 shrink-0 snap-start overflow-hidden p-6">
-        <SongList />
+      <div 
+        ref={songListRef}
+        className="h-screen w-full flex flex-col justify-center items-start px-12 shrink-0 snap-start overflow-hidden p-6"
+      >
+        <SongList activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
     </main>
   );
