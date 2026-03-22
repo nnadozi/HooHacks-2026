@@ -267,16 +267,21 @@ The `/api/choreography/generate` endpoint accepts both **video** and **audio** u
 - Only frames graded **Miss** or **OK** are sent to Gemini. Do not send Perfect or Good frames.
 - Up to 20 frames are sampled (evenly spaced) for Gemini critique generation.
 - Gemini rate limit: 10 feedback analyses per user per day, enforced server-side.
-- If Gemini is unavailable, fallback critiques are auto-generated from joint deltas.
+- If Gemini is unavailable, fallback critiques are auto-generated using body group tips (arms, legs, head, core, hands) instead of raw joint names.
+- Similar consecutive critiques are merged — the earliest timestamp is kept and duplicates removed.
 
 ---
 
 ## Gemini Prompt Contract
 
-Each call to Gemini must include:
-1. Frame timestamp (ms)
-2. List of joints (max 6 per frame) with expected vs. actual position delta, using human-readable names (`left_elbow`, `right_knee`, etc.)
-3. Instruction: return a single concise critique sentence per frame (e.g. "Left arm should be raised higher")
+Gemini generates **high-level dance coaching** feedback, not joint-specific critiques:
+
+1. Frame timestamp (ms) and joint delta data are sent to Gemini
+2. Gemini returns fun, encouraging critiques about **body groups** (arms, legs, head, core, hands) — e.g., "Put more power into your legs!", "Sharpen up your hand movements!"
+3. Do NOT mention specific joint names (left_index, right_wrist) or coordinate numbers in critiques
+4. Similar consecutive critiques are **merged** — the earliest timestamp is kept and duplicates are removed
+5. Fallback critiques (when Gemini is unavailable) use body group tips instead of raw joint deltas
+6. Max 8 critiques per feedback session
 
 Do not send raw keypoint arrays to Gemini — convert to human-readable joint names and deltas first.
 
@@ -351,15 +356,15 @@ Never expose internal stack traces or raw exception messages in error responses.
 
 The choreography page (`/choreography/[id]`) supports live webcam recording:
 
-1. User clicks **"Record Performance"** on the preview page
-2. A **3-second countdown** plays on both the skeleton preview and webcam panels
+1. User clicks **"Record"** on the preview page
+2. A **5-second countdown** plays on both the skeleton preview and webcam panels
 3. Skeleton playback and `MediaRecorder` start simultaneously
 4. Side-by-side layout: skeleton preview (left) + webcam with pose detection overlay (right)
 5. Recording **auto-stops** when the choreography duration elapses, or the user clicks **"Stop & Submit"**
 6. The recorded blob is submitted to `/api/feedback/analyze` and the user is routed to the feedback page
-7. Camera is turned off after the recording blob is captured
+7. Camera is turned off after the recording blob is captured, and also on component unmount
 
-The feedback page (`/feedback/[id]`) also supports direct webcam recording or file upload as alternatives.
+The feedback page (`/feedback/[id]`) supports file upload. The "Again" button routes back to the choreography page for another recording.
 
 ---
 
@@ -419,7 +424,7 @@ Stretch goals (leaderboard, real-time overlay) come only after phase 4 is comple
 - `cv.py`: takes a local file path, returns a list of keypoint frame arrays. Shape: `list[list[dict]]` where each dict is `{x, y, z, visibility}`. Handles WebM→MP4 conversion and FPS detection with fallbacks.
 - `audio.py`: detects BPM from audio or video files. Determines file type from filename/content_type and uses appropriate suffix for temp file.
 - `scoring.py`: normalizes keypoints using uniform scaling (centered, proportion-preserving), computes pose similarity via mean per-joint Euclidean distance (divisor: 0.85), returns grade tier and similarity score. Also provides cosine similarity for duplicate detection.
-- `gemini.py`: accepts a list of `{timestamp_ms, joint_deltas: {joint_name: {expected, actual}}}` dicts, returns a list of `{timestamp_ms, text}` critique dicts. Never passes raw keypoint arrays to Gemini. Includes fallback critique generation if Gemini call fails.
+- `gemini.py`: accepts a list of `{timestamp_ms, ref_keypoints, perf_keypoints}` dicts, returns a list of `{timestamp_ms, text}` critique dicts. Generates high-level dance coaching (body groups, not specific joints). Merges similar consecutive critiques. Includes body-group-based fallback critique generation if Gemini call fails.
 - `choreography.py`: assembles move sequences from the MongoDB pool, also generates synthetic placeholder moves when no real moves are available.
 - `storage.py`: uses `gcs.Client(project=settings.GCS_PROJECT_ID)` for GCS operations.
 
@@ -496,7 +501,7 @@ No env var may have a hardcoded default that is a real secret.
 - `Recorder.tsx` uses `getUserMedia` to access the webcam and `MediaRecorder` to capture video.
 - Supports **external control** via `externalControl`, `shouldStart`, `shouldStop` props for synchronized recording.
 - On stop, produces a `Blob` in `video/webm` format and passes it up via an `onRecordingComplete(blob: Blob)` callback.
-- Camera is turned off after the recording blob is captured.
+- Camera is turned off after the recording blob is captured, and also on component unmount (cleanup effect).
 - `useRecorder.ts` encapsulates the `getUserMedia` / `MediaRecorder` lifecycle.
 - `usePoseDetection.ts` overlays a real-time skeleton on the webcam feed using MediaPipe.
 - Do not use any third-party recording libraries.
