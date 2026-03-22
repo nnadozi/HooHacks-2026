@@ -1,12 +1,12 @@
 "use client";
 
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import StickFigure3D from "@/components/StickFigure3D";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -17,7 +17,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -28,6 +36,16 @@ import {
 import { createRoutine, getMove, listMoves } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Keypoint, Move, MoveSummary } from "@/types";
+import {
+  CheckCircle2,
+  ListPlus,
+  Loader2,
+  Pause,
+  Play,
+  Save,
+  Trash2,
+  X,
+} from "lucide-react";
 
 const MOVE_MIME = "application/x-remix-move";
 const TIMELINE_MIME = "application/x-remix-timeline-index";
@@ -45,12 +63,14 @@ function moveItem<T>(arr: T[], fromIndex: number, toIndex: number) {
 }
 
 export default function EditorPage() {
-  const router = useRouter();
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard" | "all">(
     "all"
   );
   const [search, setSearch] = useState("");
   const [routineName, setRoutineName] = useState("My Routine");
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveDialogError, setSaveDialogError] = useState<string | null>(null);
+  const [saveSuccessName, setSaveSuccessName] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<string[]>([]);
   const [selectedMoveId, setSelectedMoveId] = useState<string | null>(null);
   const [hoverPreview, setHoverPreview] = useState<{
@@ -60,7 +80,7 @@ export default function EditorPage() {
   } | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const { data: movesData, isLoading: isMovesLoading, refetch } = useQuery({
+  const { data: movesData, isLoading: isMovesLoading } = useQuery({
     queryKey: ["moves", difficulty],
     queryFn: () =>
       listMoves({
@@ -130,18 +150,28 @@ export default function EditorPage() {
   }, [timeline, moveSummaryById]);
 
   const saveRoutine = useMutation({
-    mutationFn: () =>
+    mutationFn: (name: string) =>
       createRoutine({
-        name: routineName,
+        name,
         move_sequence: timeline,
       }),
     onSuccess: (res) => {
-      alert(`Saved routine: ${res.name} (${res.id})`);
+      setSaveDialogOpen(false);
+      setSaveDialogError(null);
+      setSaveSuccessName(res.name);
     },
     onError: (err) => {
-      alert(err instanceof Error ? err.message : "Failed to save routine");
+      setSaveDialogError(
+        err instanceof Error ? err.message : "Could not save. Try again."
+      );
     },
   });
+
+  useEffect(() => {
+    if (!saveSuccessName) return;
+    const t = window.setTimeout(() => setSaveSuccessName(null), 6000);
+    return () => window.clearTimeout(t);
+  }, [saveSuccessName]);
 
   const handleDropOnTimeline = (e: React.DragEvent, insertIndex: number | null) => {
     e.preventDefault();
@@ -174,12 +204,6 @@ export default function EditorPage() {
   return (
     <main className="flex h-[calc(100vh-3.5rem)] w-full overflow-hidden bg-background text-foreground">
       <aside className="flex w-80 shrink-0 flex-col gap-4 border-r border-border p-4">
-        <div className="flex items-center justify-between gap-2">
-          <h1 className="font-heading text-base font-semibold">Move bin</h1>
-          <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
-            Refresh
-          </Button>
-        </div>
 
         <div className="space-y-2">
           <Label htmlFor="move-search" className="sr-only">
@@ -274,55 +298,104 @@ export default function EditorPage() {
           </div>
         </ScrollArea>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs font-bold text-primary">
           Drag into the timeline, or double-click to append.
         </p>
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col gap-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => router.push("/")}>
-              Home
-            </Button>
-            <Separator orientation="vertical" className="hidden h-6 sm:block" />
-            <Label htmlFor="routine-name" className="sr-only">
-              Routine name
-            </Label>
-            <Input
-              id="routine-name"
-              value={routineName}
-              onChange={(e) => setRoutineName(e.target.value)}
-              className="w-56 max-w-full bg-background sm:w-72"
+        {saveSuccessName ? (
+          <Alert className="relative border-emerald-500/35 bg-emerald-500/[0.12] pr-10 text-foreground dark:border-emerald-400/40 dark:bg-emerald-500/15">
+            <CheckCircle2
+              className="text-emerald-600 dark:text-emerald-400"
+              aria-hidden
             />
-            <span className="text-xs text-muted-foreground">
-              {timeline.length} clips · {formatDuration(totalDurationMs)}
-            </span>
-          </div>
+            <AlertTitle>Routine saved</AlertTitle>
+            <AlertDescription>
+              <span className="font-medium text-foreground">{saveSuccessName}</span> is
+              saved and ready to use.
+            </AlertDescription>
+            <AlertAction>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="rounded-md text-muted-foreground hover:text-foreground"
+                onClick={() => setSaveSuccessName(null)}
+                aria-label="Dismiss saved message"
+              >
+                <X className="size-4" />
+              </Button>
+            </AlertAction>
+          </Alert>
+        ) : null}
 
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-start gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => setIsPlaying((p) => !p)}
               disabled={routineFrames.length === 0}
+              className="gap-2"
             >
-              {isPlaying ? "Pause" : "Play"}
+              {isPlaying ? (
+                <>
+                  <Pause className="size-4 shrink-0" aria-hidden />
+                  Pause
+                </>
+              ) : (
+                <>
+                  <Play className="size-4 shrink-0" aria-hidden />
+                  Play
+                </>
+              )}
             </Button>
             <Button
               type="button"
-              onClick={() => saveRoutine.mutate()}
-              disabled={saveRoutine.isPending || timeline.length === 0}
+              onClick={() => setSaveDialogOpen(true)}
+              disabled={timeline.length === 0}
+              className="gap-2"
             >
-              {saveRoutine.isPending ? "Saving…" : "Save"}
+              <Save className="size-4 shrink-0" aria-hidden />
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="gap-2"
+              onClick={() => {
+                const id = selectedMoveQuery.data?.id;
+                if (id) setTimeline((prev) => [...prev, id]);
+              }}
+              disabled={
+                !selectedMoveId ||
+                selectedMoveQuery.isLoading ||
+                !selectedMoveQuery.data
+              }
+            >
+              <ListPlus className="size-4 shrink-0" aria-hidden />
+              Add to timeline
             </Button>
           </div>
         </div>
 
         <Card className="flex min-h-0 flex-1 flex-col border-border shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-medium">Timeline</CardTitle>
-            <CardDescription>Drop moves or reorder clips.</CardDescription>
+          <CardHeader className="!flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-base font-medium">Timeline</CardTitle>
+              <CardDescription>Drop moves or reorder clips.</CardDescription>
+            </div>
+            <div
+              className="flex shrink-0 flex-wrap items-baseline justify-center gap-x-2 gap-y-0 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2.5 text-center shadow-sm ring-1 ring-primary/10 sm:justify-end"
+              aria-live="polite"
+              aria-label={`Total time ${formatDuration(totalDurationMs)}`}
+            >
+              <span className="text-sm font-semibold text-foreground">Total Time:</span>
+              <span className="font-heading text-xl font-bold tabular-nums tracking-tight text-foreground">
+                {formatDuration(totalDurationMs)}
+              </span>
+            </div>
           </CardHeader>
           <CardContent className="min-h-0 flex-1">
             <div
@@ -361,14 +434,15 @@ export default function EditorPage() {
 
                         <Button
                           type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 opacity-0 transition-opacity group-hover:opacity-100"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                          aria-label="Remove clip from timeline"
                           onClick={() =>
                             setTimeline((prev) => prev.filter((_, i) => i !== index))
                           }
                         >
-                          Remove
+                          <Trash2 className="size-3.5" aria-hidden />
                         </Button>
                       </div>
                     );
@@ -383,7 +457,44 @@ export default function EditorPage() {
       <aside className="flex w-[min(720px,42vw)] shrink-0 flex-col gap-4 overflow-y-auto border-l border-border p-4">
         <Card className="border-border shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-medium">Preview</CardTitle>
+            <CardTitle className="text-base font-medium">Selected move</CardTitle>
+            <CardDescription>
+              Append the current selection with{" "}
+              <span className="font-medium text-foreground">Add to timeline</span> in the bar
+              above, drag from the bin, or double-click a move.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm">
+            {!selectedMoveId ? (
+              null
+            ) : selectedMoveQuery.isLoading ? (
+              <p className="text-muted-foreground">Loading…</p>
+            ) : selectedMoveQuery.data ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-mono text-xs text-foreground">
+                    {selectedMoveQuery.data.id}
+                  </span>
+                  <Badge variant="outline" className="capitalize">
+                    {selectedMoveQuery.data.difficulty}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {formatDuration(selectedMoveQuery.data.duration_ms)} ·{" "}
+                  {selectedMoveQuery.data.bpm_range?.[0]}–{selectedMoveQuery.data.bpm_range?.[1]}{" "}
+                  BPM
+                </p>
+              </div>
+            ) : (
+              <p className="text-muted-foreground">Move not found.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-medium">Routine preview</CardTitle>
+            <CardDescription>Full timeline playback loops while playing.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-3">
             <StickFigure3D
@@ -405,45 +516,6 @@ export default function EditorPage() {
             <p className="w-full text-[11px] text-muted-foreground/80">
               Model: “Low Poly Stick Figure Rigged” by Robersonjr.walker (CC-BY-4.0).
             </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-medium">Selected move</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm">
-            {!selectedMoveId ? (
-              <p className="text-muted-foreground">Click a move in the bin.</p>
-            ) : selectedMoveQuery.isLoading ? (
-              <p className="text-muted-foreground">Loading…</p>
-            ) : selectedMoveQuery.data ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-mono text-xs text-foreground">
-                    {selectedMoveQuery.data.id}
-                  </span>
-                  <Badge variant="outline" className="capitalize">
-                    {selectedMoveQuery.data.difficulty}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {formatDuration(selectedMoveQuery.data.duration_ms)} ·{" "}
-                  {selectedMoveQuery.data.bpm_range?.[0]}–{selectedMoveQuery.data.bpm_range?.[1]}{" "}
-                  BPM
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setTimeline((prev) => [...prev, selectedMoveQuery.data!.id])}
-                >
-                  Add to timeline
-                </Button>
-              </div>
-            ) : (
-              <p className="text-muted-foreground">Move not found.</p>
-            )}
           </CardContent>
         </Card>
       </aside>
@@ -478,6 +550,66 @@ export default function EditorPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog
+        open={saveDialogOpen}
+        onOpenChange={(open) => {
+          setSaveDialogOpen(open);
+          if (open) setSaveDialogError(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save routine</DialogTitle>
+            <DialogDescription>Name your routine, then confirm to upload.</DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const name = routineName.trim() || "Untitled routine";
+              saveRoutine.mutate(name);
+            }}
+          >
+            {saveDialogError ? (
+              <p className="text-sm text-destructive" role="alert">
+                {saveDialogError}
+              </p>
+            ) : null}
+            <Input
+              id="save-routine-name"
+              value={routineName}
+              onChange={(e) => setRoutineName(e.target.value)}
+              placeholder="My routine"
+              className="bg-background"
+              autoComplete="off"
+              autoFocus
+              aria-label="Routine name"
+            />
+            <DialogFooter>
+              <DialogClose
+                type="button"
+                className={cn(buttonVariants({ variant: "outline" }))}
+              >
+                Cancel
+              </DialogClose>
+              <Button type="submit" disabled={saveRoutine.isPending} className="gap-2">
+                {saveRoutine.isPending ? (
+                  <>
+                    <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <Save className="size-4 shrink-0" aria-hidden />
+                    Save
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
