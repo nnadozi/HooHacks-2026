@@ -79,8 +79,8 @@ async def generate_choreography(
             tmp.flush()
             tmp.close()
 
-            frames = extract_keypoints(tmp.name)
-            fps = get_video_fps(tmp.name)
+            frames = extract_keypoints(tmp.name, ffmpeg_path=settings.FFMPEG_PATH)
+            fps = get_video_fps(tmp.name, ffmpeg_path=settings.FFMPEG_PATH)
         finally:
             os.unlink(tmp.name)
 

@@ -1,7 +1,6 @@
 import logging
 import os
 import subprocess
-import tempfile
 
 import cv2
 import mediapipe as mp
@@ -9,7 +8,7 @@ import mediapipe as mp
 logger = logging.getLogger("justdance.cv")
 
 
-def _convert_webm_to_mp4(video_path: str) -> str:
+def _convert_webm_to_mp4(video_path: str, ffmpeg_path: str) -> str:
     """Convert a WebM file to MP4 using ffmpeg for OpenCV compatibility.
 
     Browser-recorded WebM files often have EBML headers that OpenCV cannot parse.
@@ -19,7 +18,7 @@ def _convert_webm_to_mp4(video_path: str) -> str:
     try:
         result = subprocess.run(
             [
-                "ffmpeg", "-y",
+                ffmpeg_path, "-y",
                 "-err_detect", "ignore_err",
                 "-fflags", "+genpts+discardcorrupt",
                 "-i", video_path,
@@ -37,11 +36,14 @@ def _convert_webm_to_mp4(video_path: str) -> str:
         logger.error("ffmpeg conversion failed (exit %d): %s", e.returncode, stderr)
         raise ValueError(f"Cannot convert video {video_path} — ffmpeg error: {stderr[-500:]}") from e
     except FileNotFoundError as e:
+        if ffmpeg_path != "ffmpeg":
+            logger.warning("ffmpeg not found at %s; retrying via PATH", ffmpeg_path)
+            return _convert_webm_to_mp4(video_path, ffmpeg_path="ffmpeg")
         logger.error("ffmpeg not found: %s", e)
         raise ValueError(f"Cannot convert video {video_path} — is ffmpeg installed?") from e
 
 
-def extract_keypoints(video_path: str) -> list[list[dict]]:
+def extract_keypoints(video_path: str, ffmpeg_path: str = "ffmpeg") -> list[list[dict]]:
     """Extract pose keypoints from every frame of a video.
 
     Returns a list of frames, where each frame is a list of 33 keypoint dicts
@@ -55,7 +57,7 @@ def extract_keypoints(video_path: str) -> list[list[dict]]:
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened() and video_path.endswith(".webm"):
         cap.release()
-        converted_path = _convert_webm_to_mp4(video_path)
+        converted_path = _convert_webm_to_mp4(video_path, ffmpeg_path=ffmpeg_path)
         cap = cv2.VideoCapture(converted_path)
 
     if not cap.isOpened():
@@ -99,7 +101,7 @@ def extract_keypoints(video_path: str) -> list[list[dict]]:
     return frames
 
 
-def get_video_fps(video_path: str) -> float:
+def get_video_fps(video_path: str, ffmpeg_path: str = "ffmpeg") -> float:
     """Get the FPS of a video file.
 
     WebM files recorded via MediaRecorder often report wildly inaccurate FPS
@@ -107,11 +109,10 @@ def get_video_fps(video_path: str) -> float:
     the frame count and duration, or fall back to 30.0.
     """
     converted_path = None
-    """Get the FPS of a video file."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened() and video_path.endswith(".webm"):
         cap.release()
-        converted_path = _convert_webm_to_mp4(video_path)
+        converted_path = _convert_webm_to_mp4(video_path, ffmpeg_path=ffmpeg_path)
         cap = cv2.VideoCapture(converted_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     cap.release()

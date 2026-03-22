@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Recorder from "@/components/Recorder";
 import StickFigure3D from "@/components/StickFigure3D";
+import SkeletonCanvas from "@/components/SkeletonCanvas";
 import { Button } from "@/components/ui/button";
 import {
   Card,

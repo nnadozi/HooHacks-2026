@@ -3,6 +3,7 @@ import os
 
 from bson import ObjectId
 
+from app.config import get_settings
 from app.db import sync_jobs_collection, sync_moves_collection
 from app.services.audio import detect_bpm
 from app.services.cv import extract_keypoints, get_video_fps
@@ -10,6 +11,7 @@ from app.services.storage import download_to_temp
 from app.worker import celery_app
 
 logger = logging.getLogger("justdance.tasks.ingest")
+settings = get_settings()
 
 
 @celery_app.task(name="tasks.ingest_video")
@@ -28,8 +30,8 @@ def ingest_video(job_id: str, file_uri: str) -> None:
 
         try:
             # Extract keypoints
-            all_frames = extract_keypoints(video_path)
-            fps = get_video_fps(video_path)
+            all_frames = extract_keypoints(video_path, ffmpeg_path=settings.FFMPEG_PATH)
+            fps = get_video_fps(video_path, ffmpeg_path=settings.FFMPEG_PATH)
             logger.info("Extracted %d frames at %.1f fps", len(all_frames), fps)
 
             if not all_frames:

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import type { Keypoint } from "@/types";
+import { cn } from "@/lib/utils";
 
 // MediaPipe Pose connection pairs (indices into 33-landmark array)
 const CONNECTIONS: [number, number][] = [
@@ -26,6 +27,7 @@ interface SkeletonCanvasProps {
   isPlaying: boolean;
   width?: number;
   height?: number;
+  className?: string;
   /** When true, renders with transparent background for overlaying on video */
   overlay?: boolean;
   /** Callback with current frame index so parent can sync */
@@ -40,6 +42,7 @@ export default function SkeletonCanvas({
   isPlaying,
   width = 640,
   height = 480,
+  className,
   overlay = false,
   onFrameChange,
   videoElement,
@@ -131,10 +134,15 @@ export default function SkeletonCanvas({
       ref={canvasRef}
       width={width}
       height={height}
-      className={
+      className={cn(
+        overlay
+          ? "h-full w-full rounded-xl bg-transparent"
+          : {
         overlay
           ? "pointer-events-none absolute left-0 top-0 h-full w-full rounded-lg"
-          : "rounded-xl border border-border bg-card/80 shadow-inner"
+          : "rounded-xl border border-border bg-card/80 shadow-inner",
+        className
+      )}
       }
     />
   );

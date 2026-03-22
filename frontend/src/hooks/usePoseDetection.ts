@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
-import type { PoseLandmarker } from "@mediapipe/tasks-vision";
+import type { Landmark, PoseLandmarker } from "@mediapipe/tasks-vision";
 
 // MediaPipe Pose connection pairs (body only — skip face landmarks for clarity)
 const CONNECTIONS: [number, number][] = [
@@ -18,7 +18,11 @@ const CONNECTIONS: [number, number][] = [
 ];
 
 interface UsePoseDetectionReturn {
-  start: (video: HTMLVideoElement, canvas: HTMLCanvasElement) => Promise<void>;
+  start: (
+    video: HTMLVideoElement,
+    canvas: HTMLCanvasElement,
+    options?: { onLandmarks?: (landmarks: Landmark[]) => void }
+  ) => Promise<void>;
   stop: () => void;
   isReady: boolean;
 }
@@ -29,7 +33,11 @@ export function usePoseDetection(): UsePoseDetectionReturn {
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
   const runningRef = useRef(false);
 
-  const start = useCallback(async (video: HTMLVideoElement, canvas: HTMLCanvasElement) => {
+  const start = useCallback(async (
+    video: HTMLVideoElement,
+    canvas: HTMLCanvasElement,
+    options?: { onLandmarks?: (landmarks: Landmark[]) => void }
+  ) => {
     const mod = await import("@mediapipe/tasks-vision");
 
     const vision = await mod.FilesetResolver.forVisionTasks(
@@ -62,11 +70,13 @@ export function usePoseDetection(): UsePoseDetectionReturn {
         const timestampMs = performance.now();
 
         const results = landmarkerRef.current.detectForVideo(video, timestampMs);
+        const firstPose = results.landmarks?.[0] ?? null;
+        options?.onLandmarks?.(firstPose ?? []);
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        if (results.landmarks && results.landmarks.length > 0) {
-          const landmarks = results.landmarks[0];
+        if (firstPose && firstPose.length > 0) {
+          const landmarks = firstPose;
           const cw = canvas.width;
           const ch = canvas.height;
 

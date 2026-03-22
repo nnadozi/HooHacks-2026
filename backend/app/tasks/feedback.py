@@ -3,6 +3,7 @@ import os
 
 from bson import ObjectId
 
+from app.config import get_settings
 from app.db import (
     sync_choreographies_collection,
     sync_feedback_collection,
@@ -16,6 +17,7 @@ from app.services.storage import download_to_temp
 from app.worker import celery_app
 
 logger = logging.getLogger("justdance.tasks.feedback")
+settings = get_settings()
 
 def _spread_sample(frames: list[dict], max_items: int) -> list[dict]:
     """Pick up to max_items frames spread across the full list (deterministic)."""
@@ -88,8 +90,8 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
         logger.info("Downloaded performance video to %s", video_path)
 
         try:
-            performance_frames = extract_keypoints(video_path)
-            fps = get_video_fps(video_path)
+            performance_frames = extract_keypoints(video_path, ffmpeg_path=settings.FFMPEG_PATH)
+            fps = get_video_fps(video_path, ffmpeg_path=settings.FFMPEG_PATH)
             logger.info("Extracted %d performance frames at %.1f fps", len(performance_frames), fps)
         finally:
             os.unlink(video_path)

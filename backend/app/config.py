@@ -2,6 +2,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 
 
@@ -35,6 +36,12 @@ class Settings(BaseSettings):
 
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:3000"
+
+    # Tools
+    FFMPEG_PATH: str = Field(
+        default="ffmpeg",
+        validation_alias=AliasChoices("FFMPEG_PATH", "ffmpeg_path"),
+    )
 
     @property
     def score_thresholds_parsed(self) -> dict[str, float]:

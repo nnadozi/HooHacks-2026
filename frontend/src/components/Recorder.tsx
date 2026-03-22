@@ -34,6 +34,7 @@ export default function Recorder({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poseStartedRef = useRef(false);
+  const notifiedBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     if (videoRef.current && stream) {
