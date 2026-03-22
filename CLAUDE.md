@@ -79,8 +79,8 @@ npm run build && npm run start     # Production build
 │   ├── src/
 │   │   ├── app/                  # Next.js 15 App Router pages
 │   │   │   ├── page.tsx          # Landing / upload (accepts audio + video, difficulty selector, session grid)
-│   │   │   ├── choreography/[id]/page.tsx  # Skeleton preview + live recording + countdown
-│   │   │   ├── feedback/[id]/page.tsx      # Score + critiques + webcam recording + file upload
+│   │   │   ├── choreography/[id]/page.tsx  # 3D model preview + live recording + countdown
+│   │   │   ├── feedback/[id]/page.tsx      # Score + critiques + file upload
 │   │   │   └── editor/page.tsx             # Move bin + timeline builder + routine save
 │   │   ├── components/
 │   │   │   ├── SkeletonCanvas.tsx # HTML5 Canvas skeleton overlay renderer
@@ -357,9 +357,9 @@ Never expose internal stack traces or raw exception messages in error responses.
 The choreography page (`/choreography/[id]`) supports live webcam recording:
 
 1. User clicks **"Record"** on the preview page
-2. A **5-second countdown** plays on both the skeleton preview and webcam panels
-3. Skeleton playback and `MediaRecorder` start simultaneously
-4. Side-by-side layout: skeleton preview (left) + webcam with pose detection overlay (right)
+2. A **5-second countdown** plays on both the 3D model preview and webcam panels
+3. 3D model playback and `MediaRecorder` start simultaneously
+4. Side-by-side layout: 3D stick figure model (left) + webcam with pose detection overlay (right)
 5. Recording **auto-stops** when the choreography duration elapses, or the user clicks **"Stop & Submit"**
 6. The recorded blob is submitted to `/api/feedback/analyze` and the user is routed to the feedback page
 7. Camera is turned off after the recording blob is captured, and also on component unmount
@@ -488,14 +488,13 @@ No env var may have a hardcoded default that is a real secret.
 - **TanStack Query** owns all server state: fetching choreography previews, polling job status, fetching feedback results, fetching user history, fetching moves/routines.
 - Do not duplicate server data in Zustand. If it comes from the API, it lives in React Query's cache.
 
-**Skeleton Rendering:**
-- 2D skeleton animation rendered on `<canvas>` inside `SkeletonCanvas.tsx`.
-- 3D stick figure rendered via THREE.js inside `StickFigure3D.tsx`.
-- `SkeletonCanvas` accepts `frames: Keypoint[][]`, `fps`, `isPlaying`, optional `overlay` and `videoElement` for sync.
-- Uses MediaPipe connection pairs to draw anatomically correct skeleton bones.
-- Use `requestAnimationFrame` for the animation loop. Do not use `setInterval`.
-- Draw bones as lines between connected joint pairs (cyan). Draw joints as filled circles (rose).
-- No third-party canvas/animation libraries — use the Canvas API directly.
+**Skeleton / 3D Model Rendering:**
+- The choreography preview and recording pages use `StickFigure3D.tsx` — a THREE.js rigged 3D stick figure model driven by keypoint data.
+- `StickFigure3D` accepts `frames: Keypoint[][]`, `fps`, `isPlaying`, `width`, `height`, optional `className` and `modelUrl`.
+- Uses a GLTF model (`/models/low_poly_stick_figure_rigged/scene.gltf`) with bone drivers mapped to MediaPipe keypoint indices.
+- The recording view uses a `ResizeObserver` to dynamically size the 3D renderer to fill its container.
+- `SkeletonCanvas.tsx` (2D canvas renderer) is still available but no longer used on the choreography page.
+- Use `requestAnimationFrame` for animation loops. Do not use `setInterval`.
 
 **Recording:**
 - `Recorder.tsx` uses `getUserMedia` to access the webcam and `MediaRecorder` to capture video.

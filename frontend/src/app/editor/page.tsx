@@ -1,9 +1,12 @@
 "use client";
 
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import MusicUploadDialog from "@/components/MusicUploadDialog";
 import StickFigure3D from "@/components/StickFigure3D";
+import WaveformTimeline from "@/components/WaveformTimeline";
+import type { TimedMove } from "@/components/WaveformTimeline";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -40,6 +43,7 @@ import {
   CheckCircle2,
   ListPlus,
   Loader2,
+  Music,
   Pause,
   Play,
   Save,
@@ -80,6 +84,135 @@ export default function EditorPage() {
   } | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  // Music timeline state
+  const [musicDialogOpen, setMusicDialogOpen] = useState(true);
+  const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
+  const [timedMoves, setTimedMoves] = useState<TimedMove[]>([]);
+  const [currentTimeMs, setCurrentTimeMs] = useState(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  const playStartTimeRef = useRef<number>(0);
+  const playOffsetRef = useRef<number>(0);
+  const animFrameRef = useRef<number>(0);
+
+  const isMusicMode = audioBuffer !== null;
+
+  // Decode audio file
+  const handleMusicFile = useCallback(async (file: File) => {
+    setMusicDialogOpen(false);
+    try {
+      const ctx = new AudioContext();
+      audioContextRef.current = ctx;
+      const arrayBuffer = await file.arrayBuffer();
+      const decoded = await ctx.decodeAudioData(arrayBuffer);
+      setAudioBuffer(decoded);
+    } catch {
+      alert("Could not decode audio file. Please try a different format.");
+    }
+  }, []);
+
+  const handleMusicSkip = useCallback(() => {
+    setMusicDialogOpen(false);
+  }, []);
+
+  // Audio playback
+  const stopAudio = useCallback(() => {
+    if (sourceNodeRef.current) {
+      try { sourceNodeRef.current.stop(); } catch { /* already stopped */ }
+      sourceNodeRef.current = null;
+    }
+    cancelAnimationFrame(animFrameRef.current);
+  }, []);
+
+  const startAudio = useCallback((fromMs: number) => {
+    if (!audioBuffer || !audioContextRef.current) return;
+    stopAudio();
+
+    const ctx = audioContextRef.current;
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(ctx.destination);
+    source.start(0, fromMs / 1000);
+    sourceNodeRef.current = source;
+    playStartTimeRef.current = ctx.currentTime;
+    playOffsetRef.current = fromMs;
+
+    source.onended = () => {
+      setIsPlaying(false);
+      setCurrentTimeMs(0);
+    };
+
+    const tick = () => {
+      const elapsed = (ctx.currentTime - playStartTimeRef.current) * 1000;
+      const newTime = playOffsetRef.current + elapsed;
+      if (newTime >= audioBuffer.duration * 1000) {
+        setIsPlaying(false);
+        setCurrentTimeMs(0);
+        return;
+      }
+      setCurrentTimeMs(newTime);
+      animFrameRef.current = requestAnimationFrame(tick);
+    };
+    animFrameRef.current = requestAnimationFrame(tick);
+  }, [audioBuffer, stopAudio]);
+
+  // Sync play/pause with audio
+  useEffect(() => {
+    if (!isMusicMode) return;
+    if (isPlaying) {
+      startAudio(currentTimeMs);
+    } else {
+      stopAudio();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, isMusicMode]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopAudio();
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+      }
+    };
+  }, [stopAudio]);
+
+  const handleSeek = useCallback((timeMs: number) => {
+    setCurrentTimeMs(timeMs);
+    if (isPlaying) {
+      startAudio(timeMs);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, startAudio]);
+
+  const handleDropOnWaveform = useCallback((moveId: string, timeMs: number) => {
+    const summary = moveSummaryByIdRef.current.get(moveId);
+    const durationMs = summary?.duration_ms ?? 2000;
+
+    // Snap: prevent going past end
+    const totalMs = audioBuffer ? audioBuffer.duration * 1000 : 0;
+    const clampedStart = Math.max(0, Math.min(timeMs, totalMs - durationMs));
+
+    setTimedMoves((prev) => {
+      const next = [...prev, { id: moveId, startMs: clampedStart, durationMs }];
+      next.sort((a, b) => a.startMs - b.startMs);
+      return next;
+    });
+  }, [audioBuffer]);
+
+  const handleRemoveTimedMove = useCallback((index: number) => {
+    setTimedMoves((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleResizeTimedMove = useCallback((index: number, newStartMs: number, newDurationMs: number) => {
+    setTimedMoves((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], startMs: newStartMs, durationMs: newDurationMs };
+      next.sort((a, b) => a.startMs - b.startMs);
+      return next;
+    });
+  }, []);
+
   const { data: movesData, isLoading: isMovesLoading } = useQuery({
     queryKey: ["moves", difficulty],
     queryFn: () =>
@@ -105,6 +238,9 @@ export default function EditorPage() {
     return map;
   }, [movesData?.moves]);
 
+  const moveSummaryByIdRef = useRef(moveSummaryById);
+  useEffect(() => { moveSummaryByIdRef.current = moveSummaryById; }, [moveSummaryById]);
+
   const selectedMoveQuery = useQuery({
     queryKey: ["move", selectedMoveId],
     queryFn: () => getMove(selectedMoveId as string),
@@ -119,9 +255,14 @@ export default function EditorPage() {
     staleTime: Infinity,
   });
 
+  // Derive timeline IDs from timed moves (for music mode)
+  const effectiveTimeline = isMusicMode
+    ? timedMoves.map((m) => m.id)
+    : timeline;
+
   const uniqueTimelineMoveIds = useMemo(
-    () => Array.from(new Set(timeline)),
-    [timeline]
+    () => Array.from(new Set(effectiveTimeline)),
+    [effectiveTimeline]
   );
 
   const timelineMoveQueries = useQueries({
@@ -142,18 +283,40 @@ export default function EditorPage() {
   }, [timelineMoveQueries]);
 
   const routineFrames: Keypoint[][] = useMemo(() => {
-    return timeline.flatMap((id) => moveById.get(id)?.keypoints ?? []);
-  }, [timeline, moveById]);
+    return effectiveTimeline.flatMap((id) => moveById.get(id)?.keypoints ?? []);
+  }, [effectiveTimeline, moveById]);
+
+  // In music mode, compute the active move's frames at the current playback time
+  const activePreviewFrames: Keypoint[][] = useMemo(() => {
+    if (!isMusicMode) return routineFrames;
+
+    // Find the move that the cursor is currently inside
+    const activeMove = timedMoves.find(
+      (m) => currentTimeMs >= m.startMs && currentTimeMs < m.startMs + m.durationMs
+    );
+    if (!activeMove) return [];
+
+    const moveData = moveById.get(activeMove.id);
+    if (!moveData?.keypoints?.length) return [];
+
+    return moveData.keypoints;
+  }, [isMusicMode, timedMoves, currentTimeMs, moveById, routineFrames]);
+
+  // Whether the 3D preview should be animating
+  const previewPlaying = isMusicMode
+    ? isPlaying && activePreviewFrames.length > 0
+    : isPlaying;
 
   const totalDurationMs = useMemo(() => {
+    if (isMusicMode && audioBuffer) return audioBuffer.duration * 1000;
     return timeline.reduce((sum, id) => sum + (moveSummaryById.get(id)?.duration_ms ?? 0), 0);
-  }, [timeline, moveSummaryById]);
+  }, [isMusicMode, audioBuffer, timeline, moveSummaryById]);
 
   const saveRoutine = useMutation({
     mutationFn: (name: string) =>
       createRoutine({
         name,
-        move_sequence: timeline,
+        move_sequence: effectiveTimeline,
       }),
     onSuccess: (res) => {
       setSaveDialogOpen(false);
@@ -203,6 +366,13 @@ export default function EditorPage() {
 
   return (
     <main className="flex h-[calc(100vh-3.5rem)] w-full overflow-hidden bg-background text-foreground">
+      {/* Music upload dialog */}
+      <MusicUploadDialog
+        open={musicDialogOpen}
+        onFileSelected={handleMusicFile}
+        onSkip={handleMusicSkip}
+      />
+
       <aside className="flex w-80 shrink-0 flex-col gap-4 border-r border-border p-4">
 
         <div className="space-y-2">
@@ -259,7 +429,17 @@ export default function EditorPage() {
                         e.dataTransfer.effectAllowed = "copy";
                       }}
                       onClick={() => setSelectedMoveId(m.id)}
-                      onDoubleClick={() => setTimeline((prev) => [...prev, m.id])}
+                      onDoubleClick={() => {
+                        if (isMusicMode) {
+                          // In music mode, append at the end of last move or at 0
+                          const lastEnd = timedMoves.length > 0
+                            ? timedMoves[timedMoves.length - 1].startMs + timedMoves[timedMoves.length - 1].durationMs
+                            : 0;
+                          handleDropOnWaveform(m.id, lastEnd);
+                        } else {
+                          setTimeline((prev) => [...prev, m.id]);
+                        }
+                      }}
                       onMouseEnter={(e) => {
                         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                         const desiredLeft = rect.right + 12;
@@ -299,7 +479,9 @@ export default function EditorPage() {
         </ScrollArea>
 
         <p className="text-xs font-bold text-primary">
-          Drag into the timeline, or double-click to append.
+          {isMusicMode
+            ? "Drag onto the waveform, or double-click to append."
+            : "Drag into the timeline, or double-click to append."}
         </p>
       </aside>
 
@@ -336,7 +518,7 @@ export default function EditorPage() {
               type="button"
               variant="outline"
               onClick={() => setIsPlaying((p) => !p)}
-              disabled={routineFrames.length === 0}
+              disabled={isMusicMode ? timedMoves.length === 0 : routineFrames.length === 0}
               className="gap-2"
             >
               {isPlaying ? (
@@ -354,37 +536,51 @@ export default function EditorPage() {
             <Button
               type="button"
               onClick={() => setSaveDialogOpen(true)}
-              disabled={timeline.length === 0}
+              disabled={isMusicMode ? timedMoves.length === 0 : timeline.length === 0}
               className="gap-2"
             >
               <Save className="size-4 shrink-0" aria-hidden />
               Save
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              className="gap-2"
-              onClick={() => {
-                const id = selectedMoveQuery.data?.id;
-                if (id) setTimeline((prev) => [...prev, id]);
-              }}
-              disabled={
-                !selectedMoveId ||
-                selectedMoveQuery.isLoading ||
-                !selectedMoveQuery.data
-              }
-            >
-              <ListPlus className="size-4 shrink-0" aria-hidden />
-              Add to timeline
-            </Button>
+            {!isMusicMode && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="gap-2"
+                onClick={() => {
+                  const id = selectedMoveQuery.data?.id;
+                  if (id) setTimeline((prev) => [...prev, id]);
+                }}
+                disabled={
+                  !selectedMoveId ||
+                  selectedMoveQuery.isLoading ||
+                  !selectedMoveQuery.data
+                }
+              >
+                <ListPlus className="size-4 shrink-0" aria-hidden />
+                Add to timeline
+              </Button>
+            )}
+            {isMusicMode && (
+              <div className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5">
+                <Music className="size-3.5 text-primary" />
+                <span className="text-xs font-medium text-foreground">Music Mode</span>
+              </div>
+            )}
           </div>
         </div>
 
         <Card className="flex min-h-0 flex-1 flex-col border-border shadow-sm">
           <CardHeader className="!flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
-              <CardTitle className="text-base font-medium">Timeline</CardTitle>
-              <CardDescription>Drop moves or reorder clips.</CardDescription>
+              <CardTitle className="text-base font-medium">
+                {isMusicMode ? "Music Timeline" : "Timeline"}
+              </CardTitle>
+              <CardDescription>
+                {isMusicMode
+                  ? "Drop moves onto the waveform to map them to the music."
+                  : "Drop moves or reorder clips."}
+              </CardDescription>
             </div>
             <div
               className="flex shrink-0 flex-wrap items-baseline justify-center gap-x-2 gap-y-0 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2.5 text-center shadow-sm ring-1 ring-primary/10 sm:justify-end"
@@ -398,58 +594,73 @@ export default function EditorPage() {
             </div>
           </CardHeader>
           <CardContent className="min-h-0 flex-1">
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => handleDropOnTimeline(e, null)}
-              className="flex h-full min-h-[200px] flex-col rounded-lg border border-dashed border-border bg-muted/20 p-3"
-            >
-              {timeline.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  Drag moves here to build a routine.
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-start gap-2">
-                  {timeline.map((id, index) => {
-                    const summary = moveSummaryById.get(id);
-                    const label = summary ? `${formatDuration(summary.duration_ms)}` : "";
+            {isMusicMode && audioBuffer ? (
+              <div className="flex h-full min-h-[200px] flex-col rounded-lg border border-border bg-muted/20 p-3">
+                <WaveformTimeline
+                  audioBuffer={audioBuffer}
+                  moves={timedMoves}
+                  isPlaying={isPlaying}
+                  currentTimeMs={currentTimeMs}
+                  onDropMove={handleDropOnWaveform}
+                  onRemoveMove={handleRemoveTimedMove}
+                  onResizeMove={handleResizeTimedMove}
+                  onSeek={handleSeek}
+                />
+              </div>
+            ) : (
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => handleDropOnTimeline(e, null)}
+                className="flex h-full min-h-[200px] flex-col rounded-lg border border-dashed border-border bg-muted/20 p-3"
+              >
+                {timeline.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    Drag moves here to build a routine.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-start gap-2">
+                    {timeline.map((id, index) => {
+                      const summary = moveSummaryById.get(id);
+                      const label = summary ? `${formatDuration(summary.duration_ms)}` : "";
 
-                    return (
-                      <div
-                        key={`${id}-${index}`}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData(TIMELINE_MIME, String(index));
-                          e.dataTransfer.effectAllowed = "move";
-                        }}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => handleDropOnTimeline(e, index)}
-                        className="group flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 shadow-sm"
-                      >
-                        <div className="flex min-w-0 flex-col">
-                          <span className="truncate font-mono text-xs text-foreground">
-                            {id.slice(0, 10)}…
-                          </span>
-                          <span className="text-[11px] text-muted-foreground">{label}</span>
-                        </div>
-
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                          aria-label="Remove clip from timeline"
-                          onClick={() =>
-                            setTimeline((prev) => prev.filter((_, i) => i !== index))
-                          }
+                      return (
+                        <div
+                          key={`${id}-${index}`}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(TIMELINE_MIME, String(index));
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => handleDropOnTimeline(e, index)}
+                          className="group flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 shadow-sm"
                         >
-                          <Trash2 className="size-3.5" aria-hidden />
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                          <div className="flex min-w-0 flex-col">
+                            <span className="truncate font-mono text-xs text-foreground">
+                              {id.slice(0, 10)}…
+                            </span>
+                            <span className="text-[11px] text-muted-foreground">{label}</span>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                            aria-label="Remove clip from timeline"
+                            onClick={() =>
+                              setTimeline((prev) => prev.filter((_, i) => i !== index))
+                            }
+                          >
+                            <Trash2 className="size-3.5" aria-hidden />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </section>
@@ -459,9 +670,13 @@ export default function EditorPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-medium">Selected move</CardTitle>
             <CardDescription>
-              Append the current selection with{" "}
-              <span className="font-medium text-foreground">Add to timeline</span> in the bar
-              above, drag from the bin, or double-click a move.
+              {isMusicMode
+                ? "Drag moves from the bin onto the waveform, or double-click to append."
+                : <>
+                    Append the current selection with{" "}
+                    <span className="font-medium text-foreground">Add to timeline</span> in the bar
+                    above, drag from the bin, or double-click a move.
+                  </>}
             </CardDescription>
           </CardHeader>
           <CardContent className="text-sm">
@@ -498,23 +713,27 @@ export default function EditorPage() {
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-3">
             <StickFigure3D
-              frames={routineFrames}
+              frames={activePreviewFrames}
               fps={30}
-              isPlaying={isPlaying}
+              isPlaying={previewPlaying}
               width={640}
               height={480}
               autoMirrorX
               depthScale={0.12}
             />
             <p className="w-full text-xs text-muted-foreground">
-              {timeline.length === 0
+              {effectiveTimeline.length === 0
                 ? "Add clips to preview your routine."
-                : routineFrames.length === 0
-                  ? "Loading keypoints…"
-                  : "Plays the full routine in a loop."}
+                : activePreviewFrames.length === 0 && isMusicMode
+                  ? "Move the cursor over a move to see the preview."
+                  : routineFrames.length === 0
+                    ? "Loading keypoints…"
+                    : isMusicMode
+                      ? "Shows the active move at the current playback position."
+                      : "Plays the full routine in a loop."}
             </p>
             <p className="w-full text-[11px] text-muted-foreground/80">
-              Model: “Low Poly Stick Figure Rigged” by Robersonjr.walker (CC-BY-4.0).
+              Model: &ldquo;Low Poly Stick Figure Rigged&rdquo; by Robersonjr.walker (CC-BY-4.0).
             </p>
           </CardContent>
         </Card>
@@ -586,6 +805,11 @@ export default function EditorPage() {
               autoFocus
               aria-label="Routine name"
             />
+            {isMusicMode && (
+              <p className="text-xs text-muted-foreground">
+                Note: Music timing positions are saved as move order only.
+              </p>
+            )}
             <DialogFooter>
               <DialogClose
                 type="button"
