@@ -91,6 +91,8 @@ npm run build && npm run start     # Production build
 │   │   │   ├── JobPoller.tsx      # Job polling UI component
 │   │   │   ├── SongCard.tsx       # Song display card component
 │   │   │   ├── SongList.tsx       # Song list/grid component with tabs
+│   │   │   ├── MusicUploadDialog.tsx # Music track upload dialog for editor (optional)
+│   │   │   ├── WaveformTimeline.tsx # Canvas waveform timeline with move blocks, resize, select/delete
 │   │   │   ├── AppHeader.tsx      # Navigation header with theme toggle
 │   │   │   ├── ThemeToggle.tsx    # Dark/light theme toggle
 │   │   │   └── providers.tsx      # QueryClientProvider + ThemeProvider wrapper
@@ -370,12 +372,28 @@ The feedback page (`/feedback/[id]`) supports file upload. The "Again" button ro
 
 ## Routine Editor
 
-The editor page (`/editor`) allows users to build custom routines:
+The editor page (`/editor`) allows users to build custom routines. On entry, a `MusicUploadDialog` prompts the user to optionally upload a music track.
 
+### Simple Mode (no music)
 1. **Move Bin**: Searchable, filterable list of all available moves (by difficulty, genre)
 2. **Timeline Builder**: Drag-and-drop move ordering with reordering support
 3. **3D Preview**: THREE.js stick figure previewer (`StickFigure3D.tsx`) for selected moves
 4. **Save**: Saves routine via `POST /api/routines` with name and move sequence
+
+### Music Mode (with audio track)
+When a music file is uploaded, the editor switches to music mode:
+
+1. **Audio decoding** via Web Audio API (`AudioContext.decodeAudioData`) produces an `AudioBuffer`
+2. **Waveform Timeline** (`WaveformTimeline.tsx`) replaces the simple drag-drop list:
+   - Canvas-based waveform visualization with time markers
+   - Drag moves from the move bin onto the timeline to place them at specific timestamps
+   - **Resize** move blocks by dragging their left/right edges
+   - **Select** a move block by clicking it (dashed highlight + floating trash button)
+   - **Delete** a selected move via the trash button (top-right of the selected block)
+   - Click empty space to seek the playback cursor
+   - Move chips below the waveform show start time, duration, and delete buttons
+3. **Audio playback** synced with the timeline cursor using `AudioBufferSourceNode`
+4. **3D Preview** shows the move currently under the playback cursor (time-position aware)
 
 ---
 
