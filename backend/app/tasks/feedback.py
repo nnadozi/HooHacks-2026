@@ -69,11 +69,13 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
 
         # Build reference frames from move sequence
         reference_frames: list[list[dict]] = []
+        ref_duration_ms = 0
         for move_id in choreo["move_sequence"]:
             move = moves_col.find_one({"_id": move_id})
             if move:
                 reference_frames.extend(move["keypoints"])
-        logger.info("Loaded %d reference frames from %d moves", len(reference_frames), len(choreo["move_sequence"]))
+                ref_duration_ms += move.get("duration_ms", 0)
+        logger.info("Loaded %d reference frames from %d moves (total %d ms)", len(reference_frames), len(choreo["move_sequence"]), ref_duration_ms)
 
         if not reference_frames:
             logger.error("No reference frames found for choreo %s", choreography_id)
@@ -102,9 +104,26 @@ def analyze_performance(job_id: str, file_uri: str, choreography_id: str) -> Non
             )
             return
 
-        # Compare frames
+        # Filter out empty frames and log detection rate
+        non_empty = [f for f in performance_frames if f]
+        logger.info(
+            "Pose detection rate: %d/%d frames have keypoints (%.0f%%)",
+            len(non_empty), len(performance_frames),
+            100 * len(non_empty) / max(len(performance_frames), 1),
+        )
+
+        if not non_empty:
+            logger.warning("All performance frames are empty (no poses detected) for job %s", job_id)
+            jobs.update_one(
+                {"_id": job_id},
+                {"$set": {"status": "failed", "error": "No pose detected in performance video"}},
+            )
+            return
+
+        # Compare frames (pass ref_duration_ms for time-aligned resampling)
         frame_results, breakdown, aggregate_score = compare_frames(
-            reference_frames, performance_frames, fps
+            reference_frames, performance_frames, fps,
+            ref_duration_ms=ref_duration_ms if ref_duration_ms > 0 else None,
         )
         logger.info(
             "Scoring complete: score=%d, perfect=%d, good=%d, ok=%d, miss=%d",
