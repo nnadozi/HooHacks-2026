@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Recorder from "@/components/Recorder";
-import SkeletonCanvas from "@/components/SkeletonCanvas";
+import StickFigure3D from "@/components/StickFigure3D";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,7 +20,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   analyzeFeedback,
   getChoreographyPreview,
-  getVideoServeUrl,
   regenerateChoreography,
 } from "@/lib/api";
 import type { Keypoint } from "@/types";
@@ -34,8 +33,8 @@ export default function ChoreographyPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+  const modelPanelRef = useRef<HTMLDivElement>(null);
+  const [panelSize, setPanelSize] = useState({ width: 640, height: 480 });
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -61,26 +60,17 @@ export default function ChoreographyPage() {
     return preview.moves.reduce((sum, m) => sum + (m.duration_ms || 0), 0);
   }, [preview]);
 
-  // Get source video URL if available (first move with a source video)
-  const sourceVideoUrl = useMemo(() => {
-    const moveWithVideo = preview?.moves.find((m) => m.source_video_uri);
-    return moveWithVideo?.source_video_uri
-      ? getVideoServeUrl(moveWithVideo.source_video_uri)
-      : null;
-  }, [preview]);
-
-  // Sync video playback with isPlaying state
+  // Track model panel size for recording view
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !sourceVideoUrl) return;
-
-    if (isPlaying) {
-      video.currentTime = 0;
-      video.play().catch(() => {});
-    } else {
-      video.pause();
-    }
-  }, [isPlaying, sourceVideoUrl]);
+    const el = modelPanelRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) setPanelSize({ width: Math.round(width), height: Math.round(height) });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [mode]);
 
   // Auto-stop recording after choreography duration
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -241,30 +231,17 @@ export default function ChoreographyPage() {
 
         {/* Side-by-side panels filling remaining height */}
         <div className="flex flex-1 gap-1 overflow-hidden p-1">
-          {/* Skeleton preview panel */}
+          {/* 3D model preview panel */}
           <div className="flex flex-1 flex-col gap-1">
             <h3 className="px-2 text-xs font-medium text-muted-foreground">Follow Along</h3>
-            <div className="relative flex-1 overflow-hidden rounded-lg border border-border">
-              {/* Source video behind the skeleton */}
-              {sourceVideoUrl && (
-                <video
-                  ref={(el) => {
-                    videoRef.current = el;
-                    setVideoElement(el);
-                  }}
-                  src={sourceVideoUrl}
-                  muted
-                  playsInline
-                  loop
-                  className="absolute inset-0 h-full w-full rounded-lg object-fill opacity-40"
-                />
-              )}
-              <SkeletonCanvas
+            <div ref={modelPanelRef} className="relative flex-1 overflow-hidden rounded-lg border border-border">
+              <StickFigure3D
                 frames={allFrames}
                 fps={30}
                 isPlaying={isPlaying}
-                overlay
-                videoElement={videoElement}
+                width={panelSize.width}
+                height={panelSize.height}
+                className="h-full w-full rounded-lg"
               />
 
               {/* Countdown overlay */}
@@ -333,32 +310,13 @@ export default function ChoreographyPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-6">
-              <div
-                className="relative overflow-hidden rounded-lg border border-border"
-                style={{ width: 640, height: 480 }}
-              >
-                {/* Source video behind the skeleton */}
-                {sourceVideoUrl && (
-                  <video
-                    ref={(el) => {
-                      videoRef.current = el;
-                      setVideoElement(el);
-                    }}
-                    src={sourceVideoUrl}
-                    muted
-                    playsInline
-                    loop
-                    className="absolute inset-0 h-full w-full rounded-lg object-fill opacity-40"
-                  />
-                )}
-                <SkeletonCanvas
-                  frames={allFrames}
-                  fps={30}
-                  isPlaying={isPlaying}
-                  overlay={!!sourceVideoUrl}
-                  videoElement={videoElement}
-                />
-              </div>
+              <StickFigure3D
+                frames={allFrames}
+                fps={30}
+                isPlaying={isPlaying}
+                width={640}
+                height={480}
+              />
 
               <Separator className="max-w-md" />
 
