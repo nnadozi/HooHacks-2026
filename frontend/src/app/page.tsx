@@ -158,6 +158,32 @@ export default function HomePage() {
               Sessions
               <ChevronDown className="size-4" />
             </Button>
+            <Button
+              onClick={() => router.push("/editor")}
+              variant="outline"
+              className="w-full"
+              size="lg"
+            >
+              Open Routine Editor
+            </Button>
+
+            <div className="flex flex-col gap-3 pt-6 border-t border-zinc-800 mt-2">
+              <span className="text-sm text-zinc-400">Or select an existing map:</span>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => handleSelectMap("public")}
+                  className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+                >
+                  Public Beatmaps
+                </Button>
+                <Button 
+                  onClick={() => handleSelectMap("recent")}
+                  className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+                >
+                  Recently Played
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -1,0 +1,11 @@
+Model Information:
+* title:	Low Poly Stick Figure Rigged
+* source:	https://sketchfab.com/3d-models/low-poly-stick-figure-rigged-47e49c8f24d14fb7a3d477640e3d0cf2
+* author:	Robersonjr.walker (https://sketchfab.com/Robersonjr.walker)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Low Poly Stick Figure Rigged" (https://sketchfab.com/3d-models/low-poly-stick-figure-rigged-47e49c8f24d14fb7a3d477640e3d0cf2) by Robersonjr.walker (https://sketchfab.com/Robersonjr.walker) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
