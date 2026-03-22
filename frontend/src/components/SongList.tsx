@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Dispatch, SetStateAction, useState } from "react";
+import { LayoutGrid, List } from "lucide-react";
 import SongCard from "./SongCard";
 
 type Song = {
@@ -10,11 +11,17 @@ type Song = {
   tags: string[];
 };
 
-export default function SongList() {
+type SongListProps = {
+  activeTab?: "public" | "recent";
+  onTabChange?: Dispatch<SetStateAction<"public" | "recent">>;
+};
+
+export default function SongList({ activeTab = "public", onTabChange }: SongListProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(0); // Default to the first song
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTag, setFilterTag] = useState("all");
+  const [isGridView, setIsGridView] = useState(false);
 
   const activeIndex = hoveredIndex !== null ? hoveredIndex : selectedIndex;
 
@@ -42,48 +49,92 @@ export default function SongList() {
     return matchesSearch && matchesTag;
   });
 
+  const displayedSongs = activeTab === "recent" ? [...filteredSongs].reverse().slice(0, 5) : filteredSongs;
+
   return (
-    <div className="flex flex-col w-full h-full max-h-screen">
-      {/* Search & Filter Header */}
-      <div className="flex gap-4 mb-4">
+    <div className="flex flex-col w-full h-full max-h-screen overflow-hidden">
+      {/* View Tabs */}
+      <div className="flex gap-2 mb-4 flex-shrink-0">
+        <button
+          onClick={() => onTabChange?.("public")}
+          className={`px-4 py-2 font-bold rounded-xl transition-colors ${activeTab === "public"
+            ? "bg-cyan-600 text-white shadow-md"
+            : "bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
+            }`}
+        >
+          Public Beatmaps
+        </button>
+        <button
+          onClick={() => onTabChange?.("recent")}
+          className={`px-4 py-2 font-bold rounded-xl transition-colors ${activeTab === "recent"
+            ? "bg-cyan-600 text-white shadow-md"
+            : "bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
+            }`}
+        >
+          Recently Played
+        </button>
+      </div>
+
+      {/* Header */}
+      <div className="flex gap-4 mb-4 flex-shrink-0">
         <input
           type="text"
           placeholder="Search songs..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 bg-zinc-900 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 transition-colors placeholder:text-zinc-500 font-medium"
+          className="flex-1 bg-zinc-900 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 placeholder:text-zinc-500"
         />
+
         <select
           value={filterTag}
           onChange={(e) => setFilterTag(e.target.value)}
-          className="bg-zinc-900 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 transition-colors font-medium cursor-pointer"
+          className="bg-zinc-900 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500"
         >
           <option value="all">All Tags</option>
           {allTags.map((tag) => (
-            <option key={tag} value={tag}>
-              {tag}
-            </option>
+            <option key={tag}>{tag}</option>
           ))}
         </select>
+
+        <div className="flex gap-1 bg-zinc-900 border border-zinc-700 rounded-xl p-1">
+          <button onClick={() => setIsGridView(false)}>
+            <List />
+          </button>
+          <button onClick={() => setIsGridView(true)}>
+            <LayoutGrid />
+          </button>
+        </div>
       </div>
 
-      {/* Song List */}
-      <div className="flex flex-col p-6 overflow-y-auto flex-1 bg-zinc-950/50 border border-zinc-700 rounded-xl w-full shadow-inner scroll-smooth">
-        {filteredSongs.map((song, i) => (
-          <SongCard
-            key={song.id}
-            {...song}
-            selected={activeIndex === i}
-            distance={activeIndex !== null ? Math.abs(activeIndex - i) : null}
-            onHover={() => setHoveredIndex(i)}
-            onLeave={() => setHoveredIndex(null)}
-            onClick={() => setSelectedIndex(i)}
-            onPlay={() => console.log("Play:", song.title)}
-            onPractice={() => console.log("Practice:", song.title)}
-          />
-        ))}
-        {filteredSongs.length === 0 && (
-          <div className="text-zinc-500 text-center py-12 font-medium">No songs found.</div>
+      {/* Content */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-zinc-950/50 border border-zinc-700 rounded-xl">
+        <div
+          className={
+            isGridView
+              ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4 auto-rows-fr items-stretch"
+              : "flex flex-col gap-2"
+          }
+        >
+          {displayedSongs.map((song, i) => (
+            <SongCard
+              key={song.id}
+              {...song}
+              selected={activeIndex === i}
+              distance={activeIndex !== null ? Math.abs(activeIndex - i) : null}
+              onHover={() => setHoveredIndex(i)}
+              onLeave={() => setHoveredIndex(null)}
+              onClick={() => setSelectedIndex(i)}
+              onPlay={() => console.log("Play:", song.title)}
+              onPractice={() => console.log("Practice:", song.title)}
+              isGridView={isGridView}
+            />
+          ))}
+        </div>
+
+        {displayedSongs.length === 0 && (
+          <div className="text-zinc-500 text-center py-12">
+            No songs found.
+          </div>
         )}
       </div>
     </div>
