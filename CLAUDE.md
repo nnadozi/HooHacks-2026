@@ -167,7 +167,7 @@ For backend work, also read `backend/AGENTS.md`. For frontend work, also read `f
 
 The `/api/choreography/generate` endpoint accepts both **video** and **audio** uploads:
 
-- **Video uploads** (MP4, MOV, WebM): Extracts real pose keypoints from the video using MediaPipe, stores them as a move in MongoDB, and creates a choreography referencing that move. The skeleton preview shows the actual poses from the uploaded dance video.
+- **Video uploads** (MP4, MOV, WebM): Extracts real pose keypoints from the video using MediaPipe. Before storing, performs duplicate detection by sampling 10 frames and comparing against all existing moves using cosine similarity — if ≥ 95% similar to an existing move, the existing move is silently reused instead of creating a duplicate. Otherwise, stores the keypoints as a new move in MongoDB. Creates a choreography referencing the move. The skeleton preview shows the actual poses from the uploaded dance video.
 - **Audio uploads** (MP3, WAV, etc.): Detects BPM via librosa, then samples existing moves from the MongoDB pool that match the BPM range and difficulty level.
 
 ---
@@ -216,13 +216,13 @@ The `/api/choreography/generate` endpoint accepts both **video** and **audio** u
 
 ## Scoring & Pose Comparison
 
-- Keypoints are normalized to a unit bounding box before comparison (scale/position invariant).
-- Similarity metric: cosine similarity on the flattened normalized keypoint vector per frame.
+- Keypoints are normalized using uniform scaling (preserves aspect ratio) and centered at the origin before comparison (scale/position invariant, proportion-preserving).
+- Primary similarity metric: mean per-joint Euclidean distance converted to a 0–1 similarity score (distance divisor: 0.60). Cosine similarity is also available for duplicate detection.
 - Grade tiers (configurable via env var `SCORE_THRESHOLDS`):
-  - **Perfect**: ≥ 0.92
-  - **Good**: ≥ 0.85
-  - **OK**: ≥ 0.70
-  - **Miss**: < 0.70
+  - **Perfect**: ≥ 0.75
+  - **Good**: ≥ 0.60
+  - **OK**: ≥ 0.40
+  - **Miss**: < 0.40
 - Only frames graded **Miss** or **OK** are sent to Gemini. Do not send Perfect or Good frames.
 - Gemini rate limit: 10 feedback analyses per user per day, enforced server-side.
 
@@ -250,7 +250,7 @@ REDIS_URL                # Default: redis://localhost:6379/0
 GCS_PROJECT_ID           # Google Cloud project ID (required for GCS client)
 GCS_BUCKET_NAME          # GCS bucket for video/audio uploads
 GOOGLE_API_KEY           # Gemini API key
-SCORE_THRESHOLDS         # JSON: {"perfect": 0.92, "good": 0.85, "ok": 0.70}
+SCORE_THRESHOLDS         # JSON: {"perfect": 0.75, "good": 0.60, "ok": 0.40}
 MAX_UPLOAD_SIZE_MB       # Default: 100
 GEMINI_DAILY_LIMIT       # Default: 10
 ALLOWED_ORIGINS          # Comma-separated CORS origins (default: http://localhost:3000)
@@ -343,15 +343,15 @@ Stretch goals (leaderboard, real-time overlay, user-submitted moves) come only a
 - Services are stateless functions. No FastAPI or Celery imports inside service files.
 - `cv.py`: takes a local file path, returns a list of keypoint frame arrays. Shape: `list[list[dict]]` where each dict is `{x, y, z, visibility}`.
 - `audio.py`: detects BPM from audio or video files. Determines file type from filename/content_type and uses appropriate suffix for temp file.
-- `scoring.py`: normalizes keypoints to a unit bounding box, computes cosine similarity per frame, returns grade tier and similarity score.
+- `scoring.py`: normalizes keypoints using uniform scaling (centered, proportion-preserving), computes pose similarity via mean per-joint Euclidean distance, returns grade tier and similarity score. Also provides cosine similarity for duplicate detection.
 - `gemini.py`: accepts a list of `{timestamp_ms, joint_deltas: {joint_name: {expected, actual}}}` dicts, returns a list of `{timestamp_ms, text}` critique dicts. Never passes raw keypoint arrays to Gemini.
 - `storage.py`: uses `gcs.Client(project=settings.GCS_PROJECT_ID)` for GCS operations.
 
 ### Pose Comparison Rules
-- Normalize keypoints to a unit bounding box before any comparison (scale/position invariant).
-- Similarity metric: cosine similarity on the flattened normalized keypoint vector.
+- Normalize keypoints using uniform scaling and center at origin before any comparison (scale/position invariant, proportion-preserving).
+- Similarity metric: mean per-joint Euclidean distance converted to 0–1 score (divisor: 0.60). Cosine similarity used for duplicate detection.
 - Grade tiers (read from `settings.SCORE_THRESHOLDS`):
-  - Perfect ≥ 0.92, Good ≥ 0.85, OK ≥ 0.70, Miss < 0.70
+  - Perfect ≥ 0.75, Good ≥ 0.60, OK ≥ 0.40, Miss < 0.40
 - Only send Miss and OK frames to Gemini. Skip Perfect and Good to control API cost.
 - Enforce Gemini daily limit (`settings.GEMINI_DAILY_LIMIT`, default 10) per user via a counter in Redis.
 
@@ -359,6 +359,7 @@ Stretch goals (leaderboard, real-time overlay, user-submitted moves) come only a
 - Max size: `settings.MAX_UPLOAD_SIZE_MB` (default 100). Enforce in the FastAPI handler with an explicit size check before saving.
 - Accepted MIME types: `video/mp4`, `video/quicktime`, `video/webm`. Reject others with 400.
 - Save to GCS immediately on upload. Store only the URI in MongoDB — never raw bytes.
+- **Duplicate detection**: After keypoint extraction, sample 10 frames and compare against all existing moves using cosine similarity. If ≥ 95% similar, silently reuse the existing move instead of storing a duplicate. This is a background process — no error is returned to the user.
 
 ### Config / Secrets
 All config via `pydantic-settings`. Required env vars:
@@ -369,7 +370,7 @@ REDIS_URL
 GCS_PROJECT_ID
 GCS_BUCKET_NAME
 GOOGLE_API_KEY
-SCORE_THRESHOLDS       # JSON string: {"perfect": 0.92, "good": 0.85, "ok": 0.70}
+SCORE_THRESHOLDS       # JSON string: {"perfect": 0.75, "good": 0.60, "ok": 0.40}
 MAX_UPLOAD_SIZE_MB     # Default: 100
 GEMINI_DAILY_LIMIT     # Default: 10
 ALLOWED_ORIGINS        # Default: http://localhost:3000

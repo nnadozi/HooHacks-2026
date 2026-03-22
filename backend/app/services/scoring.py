@@ -5,10 +5,11 @@ from app.models.feedback import GradeTier
 
 
 def normalize_keypoints(keypoints: list[dict]) -> np.ndarray:
-    """Normalize keypoints to a unit bounding box.
+    """Normalize keypoints to a uniform scale and centered position.
 
     Takes a list of {x, y, z, visibility} dicts and returns a flat numpy array
-    of [x, y, z] values scaled to [0, 1] within the bounding box.
+    of [x, y, z] values centered around the origin and scaled uniformly
+    to avoid distorting the human pose aspect ratio.
     """
     if not keypoints:
         return np.array([])
@@ -16,10 +17,18 @@ def normalize_keypoints(keypoints: list[dict]) -> np.ndarray:
     pts = np.array([[kp["x"], kp["y"], kp["z"]] for kp in keypoints])
     mins = pts.min(axis=0)
     maxs = pts.max(axis=0)
-    ranges = maxs - mins
-    ranges[ranges == 0] = 1.0  # avoid division by zero
 
-    normalized = (pts - mins) / ranges
+    # Center the pose at the origin
+    center = (maxs + mins) / 2.0
+    centered = pts - center
+
+    # Scale uniformly based on the maximum range to preserve proportions
+    ranges = maxs - mins
+    max_range = np.max(ranges)
+    if max_range == 0:
+        max_range = 1.0
+
+    normalized = centered / max_range
     return normalized.flatten()
 
 
@@ -73,8 +82,8 @@ def pose_similarity(a: np.ndarray, b: np.ndarray) -> float:
     mean_dist = float(np.mean(distances))
 
     # Convert distance to similarity: 0 distance -> 1.0, large distance -> 0.0
-    # A mean distance of ~0.3 in unit space should score near 0 (very bad)
-    similarity = max(0.0, 1.0 - (mean_dist / 0.35))
+    # With uniform scaling, distances are more spread out so use a wider divisor
+    similarity = max(0.0, 1.0 - (mean_dist / 0.60))
     return similarity
 
 
