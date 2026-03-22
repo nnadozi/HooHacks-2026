@@ -12,7 +12,7 @@ interface ScoreDisplayProps {
 
 const GRADE_CONFIG = {
   perfect: { label: "Perfect", dot: "bg-emerald-500/90", text: "text-emerald-600 dark:text-emerald-400" },
-  good: { label: "Good", dot: "bg-sky-500/90", text: "text-sky-700 dark:text-sky-400" },
+  good: { label: "Good", dot: "bg-violet-500/90", text: "text-violet-700 dark:text-violet-400" },
   ok: { label: "OK", dot: "bg-amber-500/90", text: "text-amber-700 dark:text-amber-400" },
   miss: { label: "Miss", dot: "bg-rose-500/90", text: "text-rose-700 dark:text-rose-400" },
 } as const;

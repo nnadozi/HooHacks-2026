@@ -23,10 +23,15 @@ export default function RootLayout({
       className={cn(GeistSans.variable, GeistMono.variable, "h-full antialiased")}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-background font-sans text-foreground">
+      <body
+        className="min-h-full flex flex-col bg-background font-sans text-foreground"
+        suppressHydrationWarning
+      >
         <Providers>
           <AppHeader />
-          <div className="flex flex-1 flex-col">{children}</div>
+          <div className="remix-page-bg relative flex min-h-0 flex-1 flex-col">
+            {children}
+          </div>
         </Providers>
       </body>
     </html>

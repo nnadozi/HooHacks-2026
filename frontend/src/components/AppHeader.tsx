@@ -16,13 +16,21 @@ export default function AppHeader() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-border/80 bg-background/85 shadow-[0_1px_0_0_color-mix(in_oklch,var(--primary)_8%,transparent)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-8">
         <Link
           href="/"
-          className="font-heading text-[15px] font-semibold tracking-[-0.02em] text-foreground"
+          className="group flex items-center gap-2.5 outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md"
         >
-          Remix
+          <span
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-[13px] font-bold tracking-tight text-primary-foreground shadow-md shadow-primary/30"
+            aria-hidden
+          >
+            R
+          </span>
+          <span className="font-heading text-lg font-bold tracking-[-0.03em] text-foreground">
+            Remix
+          </span>
         </Link>
         <div className="flex items-center gap-0.5">
           <nav className="flex items-center" aria-label="Main">
