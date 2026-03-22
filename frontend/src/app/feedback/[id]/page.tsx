@@ -7,6 +7,7 @@ import FeedbackPanel from "@/components/FeedbackPanel";
 import JobPoller from "@/components/JobPoller";
 import Recorder from "@/components/Recorder";
 import ScoreDisplay from "@/components/ScoreDisplay";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -85,7 +86,7 @@ export default function FeedbackPage() {
   );
 
   return (
-    <main className="min-h-[calc(100vh-3.5rem)] bg-background px-4 py-8 sm:py-10">
+    <main className="min-h-[calc(100vh-3.5rem)] bg-background px-4 py-8 sm:px-8 sm:py-10">
       <div className="mx-auto flex max-w-2xl flex-col gap-8">
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -98,9 +99,10 @@ export default function FeedbackPage() {
         </div>
 
         {error && (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
+          <Alert variant="destructive" className="w-full" role="alert">
+            <AlertTitle>Something went wrong</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         {phase === "record" && (
@@ -142,13 +144,15 @@ export default function FeedbackPage() {
         )}
 
         {phase === "uploading" && (
-          <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/30 px-8 py-12">
-            <div
-              className="size-10 animate-spin rounded-full border-2 border-muted border-t-primary"
-              aria-hidden
-            />
-            <p className="text-sm text-muted-foreground">Uploading…</p>
-          </div>
+          <Card className="w-full border-border shadow-sm">
+            <CardContent className="flex flex-col items-center gap-3 py-12">
+              <div
+                className="size-10 animate-spin rounded-full border-2 border-muted border-t-foreground/30"
+                aria-hidden
+              />
+              <p className="text-sm font-medium text-muted-foreground">Uploading…</p>
+            </CardContent>
+          </Card>
         )}
 
         {phase === "polling" && jobId && (

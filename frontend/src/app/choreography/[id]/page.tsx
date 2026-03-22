@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   analyzeFeedback,
   getChoreographyPreview,
@@ -68,15 +69,33 @@ export default function ChoreographyPage() {
 
   if (isLoading) {
     return (
-      <main className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center gap-3 bg-background px-4">
-        <Loader2 className="size-9 animate-spin text-muted-foreground" aria-hidden />
-        <p className="text-sm text-muted-foreground">Loading preview…</p>
+      <main className="min-h-[calc(100vh-3.5rem)] bg-background px-4 py-8 sm:py-10">
+        <div className="mx-auto flex max-w-4xl flex-col gap-6">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-full max-w-md" />
+          </div>
+          <Card className="border-border shadow-sm">
+            <CardHeader>
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-64" />
+            </CardHeader>
+            <CardContent className="flex flex-col items-center gap-4">
+              <Skeleton className="aspect-[4/3] w-full max-w-[640px] rounded-lg" />
+              <div className="flex gap-2">
+                <Skeleton className="h-9 w-20" />
+                <Skeleton className="h-9 w-24" />
+                <Skeleton className="h-9 w-24" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-[calc(100vh-3.5rem)] bg-background px-4 py-8 sm:py-10">
+    <main className="min-h-[calc(100vh-3.5rem)] bg-background px-4 py-8 sm:px-8 sm:py-10">
       <div className="mx-auto flex max-w-4xl flex-col gap-8">
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">

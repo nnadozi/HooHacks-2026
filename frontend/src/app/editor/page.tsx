@@ -7,7 +7,17 @@ import { useMemo, useState } from "react";
 import StickFigure3D from "@/components/StickFigure3D";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -16,10 +26,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createRoutine, getMove, listMoves } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { Keypoint, Move, MoveSummary } from "@/types";
 
-const MOVE_MIME = "application/x-justdance-move";
-const TIMELINE_MIME = "application/x-justdance-timeline-index";
+const MOVE_MIME = "application/x-remix-move";
+const TIMELINE_MIME = "application/x-remix-timeline-index";
 
 function formatDuration(ms: number) {
   const s = Math.max(0, Math.round(ms / 10) / 100);
@@ -161,32 +172,35 @@ export default function EditorPage() {
   };
 
   return (
-    <main className="flex h-screen w-full overflow-hidden bg-zinc-950 text-zinc-100">
-      {/* Bin */}
-      <aside className="flex w-80 flex-col gap-4 border-r border-zinc-800 p-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Move Bin</h1>
-          <Button variant="outline" onClick={() => refetch()}>
+    <main className="flex h-[calc(100vh-3.5rem)] w-full overflow-hidden bg-background text-foreground">
+      <aside className="flex w-80 shrink-0 flex-col gap-4 border-r border-border p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="font-heading text-base font-semibold">Move bin</h1>
+          <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
             Refresh
           </Button>
         </div>
 
-        <div className="flex gap-2">
-          <input
+        <div className="space-y-2">
+          <Label htmlFor="move-search" className="sr-only">
+            Search moves
+          </Label>
+          <Input
+            id="move-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search moves..."
-            className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+            placeholder="Search moves…"
+            className="bg-background"
           />
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">Difficulty</span>
+          <Label className="shrink-0 text-xs text-muted-foreground">Difficulty</Label>
           <Select
             value={difficulty}
             onValueChange={(v) => setDifficulty(v as typeof difficulty)}
           >
-            <SelectTrigger className="h-8">
+            <SelectTrigger className="h-8 flex-1">
               <SelectValue placeholder="All" />
             </SelectTrigger>
             <SelectContent>
@@ -198,100 +212,105 @@ export default function EditorPage() {
           </Select>
         </div>
 
-        <div className="flex-1 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-900/40 p-2">
-          {isMovesLoading ? (
-            <div className="p-4 text-sm text-zinc-500">Loading moves…</div>
-          ) : filteredMoves.length === 0 ? (
-            <div className="p-4 text-sm text-zinc-500">
-              No moves found. Generate a choreography from a video to seed the pool.
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {filteredMoves.map((m) => {
-                const isSelected = selectedMoveId === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData(MOVE_MIME, m.id);
-                      e.dataTransfer.effectAllowed = "copy";
-                    }}
-                    onClick={() => setSelectedMoveId(m.id)}
-                    onDoubleClick={() => setTimeline((prev) => [...prev, m.id])}
-                    onMouseEnter={(e) => {
-                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      const desiredLeft = rect.right + 12;
-                      const maxLeft = Math.max(12, window.innerWidth - 340);
-                      const left = Math.min(desiredLeft, maxLeft);
-                      const desiredTop = rect.top;
-                      const maxTop = Math.max(12, window.innerHeight - 320);
-                      const top = Math.min(desiredTop, maxTop);
-                      setHoverPreview({ moveId: m.id, top, left });
-                    }}
-                    onMouseLeave={() => setHoverPreview(null)}
-                    className={[
-                      "w-full rounded-lg border px-3 py-2 text-left transition",
-                      isSelected
-                        ? "border-cyan-500/60 bg-cyan-500/10"
-                        : "border-zinc-800 bg-zinc-950/30 hover:bg-zinc-950/60",
-                    ].join(" ")}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate font-mono text-xs text-zinc-300">
-                        {m.id.slice(0, 10)}…
+        <ScrollArea className="min-h-0 flex-1 rounded-lg border border-border">
+          <div className="p-2">
+            {isMovesLoading ? (
+              <p className="p-3 text-sm text-muted-foreground">Loading moves…</p>
+            ) : filteredMoves.length === 0 ? (
+              <p className="p-3 text-sm text-muted-foreground">
+                No moves found. Generate choreography from a video to seed the pool.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {filteredMoves.map((m) => {
+                  const isSelected = selectedMoveId === m.id;
+                  return (
+                    <Button
+                      key={m.id}
+                      type="button"
+                      variant="ghost"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData(MOVE_MIME, m.id);
+                        e.dataTransfer.effectAllowed = "copy";
+                      }}
+                      onClick={() => setSelectedMoveId(m.id)}
+                      onDoubleClick={() => setTimeline((prev) => [...prev, m.id])}
+                      onMouseEnter={(e) => {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        const desiredLeft = rect.right + 12;
+                        const maxLeft = Math.max(12, window.innerWidth - 340);
+                        const left = Math.min(desiredLeft, maxLeft);
+                        const desiredTop = rect.top;
+                        const maxTop = Math.max(12, window.innerHeight - 320);
+                        const top = Math.min(desiredTop, maxTop);
+                        setHoverPreview({ moveId: m.id, top, left });
+                      }}
+                      onMouseLeave={() => setHoverPreview(null)}
+                      className={cn(
+                        "h-auto w-full flex-col items-stretch gap-1 px-3 py-2 font-normal",
+                        isSelected && "border border-foreground/15 bg-muted/80"
+                      )}
+                    >
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <span className="truncate font-mono text-xs text-foreground">
+                          {m.id.slice(0, 10)}…
+                        </span>
+                        <Badge variant="outline" className="shrink-0 capitalize">
+                          {m.difficulty}
+                        </Badge>
                       </div>
-                      <Badge variant="outline" className="capitalize">
-                        {m.difficulty}
-                      </Badge>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between text-xs text-zinc-500">
-                      <span>{formatDuration(m.duration_ms)}</span>
-                      <span>
-                        {m.bpm_range?.[0]}–{m.bpm_range?.[1]} BPM
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                      <div className="flex w-full items-center justify-between text-xs text-muted-foreground">
+                        <span>{formatDuration(m.duration_ms)}</span>
+                        <span>
+                          {m.bpm_range?.[0]}–{m.bpm_range?.[1]} BPM
+                        </span>
+                      </div>
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </ScrollArea>
 
-        <div className="text-xs text-zinc-500">
-          Tip: Drag into the timeline, or double-click to append.
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Drag into the timeline, or double-click to append.
+        </p>
       </aside>
 
-      {/* Timeline */}
       <section className="flex min-w-0 flex-1 flex-col gap-4 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <Button variant="outline" onClick={() => router.push("/")}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => router.push("/")}>
               Home
             </Button>
-            <div className="text-sm text-zinc-500">Routine</div>
-            <input
+            <Separator orientation="vertical" className="hidden h-6 sm:block" />
+            <Label htmlFor="routine-name" className="sr-only">
+              Routine name
+            </Label>
+            <Input
+              id="routine-name"
               value={routineName}
               onChange={(e) => setRoutineName(e.target.value)}
-              className="w-72 max-w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+              className="w-56 max-w-full bg-background sm:w-72"
             />
-            <div className="text-xs text-zinc-500">
-              {timeline.length} clips • {formatDuration(totalDurationMs)}
-            </div>
+            <span className="text-xs text-muted-foreground">
+              {timeline.length} clips · {formatDuration(totalDurationMs)}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
             <Button
+              type="button"
               variant="outline"
-              onClick={() => {
-                setIsPlaying((p) => !p);
-              }}
+              onClick={() => setIsPlaying((p) => !p)}
               disabled={routineFrames.length === 0}
             >
               {isPlaying ? "Pause" : "Play"}
             </Button>
             <Button
+              type="button"
               onClick={() => saveRoutine.mutate()}
               disabled={saveRoutine.isPending || timeline.length === 0}
             >
@@ -300,18 +319,19 @@ export default function EditorPage() {
           </div>
         </div>
 
-        <Card className="flex min-h-0 flex-1 flex-col border-zinc-800 bg-zinc-900/40">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Timeline</CardTitle>
+        <Card className="flex min-h-0 flex-1 flex-col border-border shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-medium">Timeline</CardTitle>
+            <CardDescription>Drop moves or reorder clips.</CardDescription>
           </CardHeader>
           <CardContent className="min-h-0 flex-1">
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => handleDropOnTimeline(e, null)}
-              className="flex h-full flex-col rounded-lg border border-zinc-800 bg-zinc-950/30 p-3"
+              className="flex h-full min-h-[200px] flex-col rounded-lg border border-dashed border-border bg-muted/20 p-3"
             >
               {timeline.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                   Drag moves here to build a routine.
                 </div>
               ) : (
@@ -330,18 +350,20 @@ export default function EditorPage() {
                         }}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => handleDropOnTimeline(e, index)}
-                        className="group flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2"
+                        className="group flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 shadow-sm"
                       >
                         <div className="flex min-w-0 flex-col">
-                          <div className="truncate font-mono text-xs text-zinc-200">
+                          <span className="truncate font-mono text-xs text-foreground">
                             {id.slice(0, 10)}…
-                          </div>
-                          <div className="text-[11px] text-zinc-500">{label}</div>
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">{label}</span>
                         </div>
 
                         <Button
+                          type="button"
                           variant="outline"
-                          className="h-7 px-2 opacity-0 transition group-hover:opacity-100"
+                          size="sm"
+                          className="h-7 px-2 opacity-0 transition-opacity group-hover:opacity-100"
                           onClick={() =>
                             setTimeline((prev) => prev.filter((_, i) => i !== index))
                           }
@@ -358,11 +380,10 @@ export default function EditorPage() {
         </Card>
       </section>
 
-      {/* Preview */}
-      <aside className="flex w-[720px] flex-col gap-4 border-l border-zinc-800 p-4">
-        <Card className="border-zinc-800 bg-zinc-900/40">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Preview</CardTitle>
+      <aside className="flex w-[min(720px,42vw)] shrink-0 flex-col gap-4 overflow-y-auto border-l border-border p-4">
+        <Card className="border-border shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-medium">Preview</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-3">
             <StickFigure3D
@@ -374,86 +395,88 @@ export default function EditorPage() {
               autoMirrorX
               depthScale={0.12}
             />
-            <div className="w-full text-xs text-zinc-500">
+            <p className="w-full text-xs text-muted-foreground">
               {timeline.length === 0
-                ? "Add clips to the timeline to preview your routine."
+                ? "Add clips to preview your routine."
                 : routineFrames.length === 0
-                ? "Loading move keypoints…"
-                : "Preview plays the full routine in sequence (looping)."}
-            </div>
-            <div className="w-full text-[11px] text-zinc-600">
-              Model credit: “Low Poly Stick Figure Rigged” by Robersonjr.walker (CC-BY-4.0).
-            </div>
+                  ? "Loading keypoints…"
+                  : "Plays the full routine in a loop."}
+            </p>
+            <p className="w-full text-[11px] text-muted-foreground/80">
+              Model: “Low Poly Stick Figure Rigged” by Robersonjr.walker (CC-BY-4.0).
+            </p>
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-800 bg-zinc-900/40">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Selected Move</CardTitle>
+        <Card className="border-border shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-medium">Selected move</CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-zinc-200">
+          <CardContent className="text-sm">
             {!selectedMoveId ? (
-              <div className="text-sm text-zinc-500">Click a move in the bin.</div>
+              <p className="text-muted-foreground">Click a move in the bin.</p>
             ) : selectedMoveQuery.isLoading ? (
-              <div className="text-sm text-zinc-500">Loading…</div>
+              <p className="text-muted-foreground">Loading…</p>
             ) : selectedMoveQuery.data ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="truncate font-mono text-xs text-zinc-300">
+                  <span className="truncate font-mono text-xs text-foreground">
                     {selectedMoveQuery.data.id}
-                  </div>
+                  </span>
                   <Badge variant="outline" className="capitalize">
                     {selectedMoveQuery.data.difficulty}
                   </Badge>
                 </div>
-                <div className="text-xs text-zinc-500">
-                  {formatDuration(selectedMoveQuery.data.duration_ms)} •{" "}
-                  {selectedMoveQuery.data.bpm_range?.[0]}–{selectedMoveQuery.data.bpm_range?.[1]} BPM
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setTimeline((prev) => [...prev, selectedMoveQuery.data.id])}
-                  >
-                    Add To Timeline
-                  </Button>
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  {formatDuration(selectedMoveQuery.data.duration_ms)} ·{" "}
+                  {selectedMoveQuery.data.bpm_range?.[0]}–{selectedMoveQuery.data.bpm_range?.[1]}{" "}
+                  BPM
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setTimeline((prev) => [...prev, selectedMoveQuery.data!.id])}
+                >
+                  Add to timeline
+                </Button>
               </div>
             ) : (
-              <div className="text-sm text-zinc-500">Move not found.</div>
+              <p className="text-muted-foreground">Move not found.</p>
             )}
           </CardContent>
         </Card>
       </aside>
 
-      {/* Hover preview popover */}
       {hoverPreview && hoveredMoveQuery.data && (
-        <div
-          className="pointer-events-none fixed z-50 w-[320px] rounded-lg border border-zinc-800 bg-zinc-950/90 p-3 shadow-xl"
+        <Card
+          className="pointer-events-none fixed z-50 w-[320px] shadow-lg"
           style={{ top: hoverPreview.top, left: hoverPreview.left }}
         >
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="truncate font-mono text-xs text-zinc-300">
-              {hoverPreview.moveId.slice(0, 10)}…
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate font-mono text-xs text-foreground">
+                {hoverPreview.moveId.slice(0, 10)}…
+              </span>
+              <Badge variant="outline" className="capitalize">
+                {hoveredMoveQuery.data.difficulty}
+              </Badge>
             </div>
-            <Badge variant="outline" className="capitalize">
-              {hoveredMoveQuery.data.difficulty}
-            </Badge>
-          </div>
-          <StickFigure3D
-            frames={hoveredMoveQuery.data.keypoints}
-            fps={30}
-            isPlaying={true}
-            width={294}
-            height={220}
-            className="rounded-md border border-zinc-800 bg-zinc-900"
-            autoMirrorX
-            depthScale={0.12}
-          />
-          <div className="mt-2 text-[11px] text-zinc-500">
-            Hover preview
-          </div>
-        </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <StickFigure3D
+              frames={hoveredMoveQuery.data.keypoints}
+              fps={30}
+              isPlaying={true}
+              width={294}
+              height={220}
+              className="rounded-md border border-border bg-muted/30"
+              autoMirrorX
+              depthScale={0.12}
+            />
+            <p className="text-[11px] text-muted-foreground">Hover preview</p>
+          </CardContent>
+        </Card>
       )}
     </main>
   );

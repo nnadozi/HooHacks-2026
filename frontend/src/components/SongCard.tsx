@@ -46,8 +46,8 @@ export default function SongCard({
       <div
         className={cn(
           "group/card flex flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm transition-colors",
-          "hover:border-primary/30",
-          selected && "border-primary/40 ring-1 ring-primary/20"
+          "hover:border-muted-foreground/25",
+          selected && "border-foreground/25 ring-1 ring-border"
         )}
         onMouseEnter={onHover}
         onMouseLeave={onLeave}
@@ -124,8 +124,8 @@ export default function SongCard({
         className={cn(
           "flex h-[100px] cursor-pointer items-stretch overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm transition-colors",
           selected
-            ? "border-primary/40 ring-1 ring-primary/15"
-            : "hover:border-primary/25"
+            ? "border-foreground/20 ring-1 ring-border"
+            : "hover:border-muted-foreground/30"
         )}
       >
         <div className="m-2 h-[84px] w-[84px] shrink-0 rounded-md bg-muted" />
@@ -152,7 +152,7 @@ export default function SongCard({
               e.stopPropagation();
               onPlay();
             }}
-            className="m-2 flex h-[84px] w-[84px] shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+            className="m-2 flex h-[84px] w-[84px] shrink-0 items-center justify-center rounded-lg bg-muted text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             aria-label="Open choreography preview"
           >
             <Play className="ml-0.5 size-9 fill-current" />

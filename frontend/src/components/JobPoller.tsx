@@ -32,7 +32,7 @@ export default function JobPoller({ jobId, onComplete }: JobPollerProps) {
           : "Failed";
 
   return (
-    <Card className="w-full max-w-md border-border shadow-sm">
+    <Card className="mx-auto w-full max-w-md border-border shadow-sm">
       <CardHeader className="gap-3 text-center">
         <Loader2 className="mx-auto size-8 animate-spin text-muted-foreground" aria-hidden />
         <CardTitle className="text-base font-medium">{label}</CardTitle>
@@ -42,7 +42,7 @@ export default function JobPoller({ jobId, onComplete }: JobPollerProps) {
       </CardHeader>
       <CardContent className="pb-8">
         <div className="mx-auto h-1 max-w-xs overflow-hidden rounded-full bg-muted">
-          <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-foreground/40" />
         </div>
       </CardContent>
     </Card>

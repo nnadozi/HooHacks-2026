@@ -71,8 +71,8 @@ export default function SkeletonCanvas({
         return;
       }
 
-      // Bones: sky blue (matches app primary)
-      ctx.strokeStyle = "#38bdf8";
+      // Bones / joints: neutral + accent (avoid a second “brand” blue on canvas)
+      ctx.strokeStyle = "#64748b";
       ctx.lineWidth = 3;
       for (const [a, b] of CONNECTIONS) {
         if (a >= frame.length || b >= frame.length) continue;
@@ -86,8 +86,7 @@ export default function SkeletonCanvas({
         ctx.stroke();
       }
 
-      // Joints: rose accent for contrast on sky bones
-      ctx.fillStyle = "#f472b6";
+      ctx.fillStyle = "#fb7185";
       for (const kp of frame) {
         if (kp.visibility < 0.5) continue;
         ctx.beginPath();

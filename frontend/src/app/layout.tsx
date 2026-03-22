@@ -1,27 +1,15 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Outfit } from "next/font/google";
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
 
 import "./globals.css";
 import AppHeader from "@/components/AppHeader";
 import Providers from "@/components/providers";
 import { cn } from "@/lib/utils";
 
-const fontSans = Outfit({
-  subsets: ["latin"],
-  variable: "--font-app-sans",
-  display: "swap",
-});
-
-const fontMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-app-mono",
-  display: "swap",
-});
-
 export const metadata: Metadata = {
-  title: "JustDance AI",
-  description: "AI-powered dance choreography and feedback",
+  title: "Remix",
+  description: "Choreography preview, performance capture, and scored feedback.",
 };
 
 export default function RootLayout({
@@ -32,13 +20,18 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn(fontSans.variable, fontMono.variable, "h-full antialiased")}
+      className={cn(GeistSans.variable, GeistMono.variable, "h-full antialiased")}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      <body
+        className="min-h-full flex flex-col bg-background font-sans text-foreground"
+        suppressHydrationWarning
+      >
         <Providers>
           <AppHeader />
-          <div className="flex flex-1 flex-col">{children}</div>
+          <div className="remix-page-bg relative flex min-h-0 flex-1 flex-col">
+            {children}
+          </div>
         </Providers>
       </body>
     </html>

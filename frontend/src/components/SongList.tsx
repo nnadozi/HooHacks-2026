@@ -106,15 +106,15 @@ export default function SongList({
   };
 
   return (
-    <div className="flex h-full max-h-screen w-full flex-col overflow-hidden">
+    <div className="flex w-full flex-col gap-4">
       <Tabs
         value={activeTab}
         onValueChange={(v) => {
           if (v === "public" || v === "recent") onTabChange?.(v);
         }}
-        className="flex min-h-0 flex-1 flex-col gap-4"
+        className="flex w-full flex-col gap-4"
       >
-        <TabsList className="h-9 w-full max-w-sm shrink-0 rounded-lg p-1">
+        <TabsList className="h-10 w-full max-w-sm shrink-0 rounded-lg bg-muted/80 p-1">
           <TabsTrigger value="public" className="flex-1 rounded-md text-sm">
             How it works
           </TabsTrigger>
@@ -123,7 +123,7 @@ export default function SongList({
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="public" className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden">
+        <TabsContent value="public" className="mt-0 outline-none data-[state=inactive]:hidden">
           <Card className="border-border shadow-sm">
             <CardHeader>
               <CardTitle className="text-base font-medium">MVP scope</CardTitle>
@@ -137,7 +137,7 @@ export default function SongList({
               Open{" "}
               <button
                 type="button"
-                className="font-medium text-primary underline-offset-4 hover:underline"
+                className="touch-manipulation font-medium text-foreground underline-offset-4 hover:underline"
                 onClick={() => onTabChange?.("recent")}
               >
                 Recent
@@ -147,21 +147,21 @@ export default function SongList({
           </Card>
         </TabsContent>
 
-        <TabsContent value="recent" className="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden data-[state=inactive]:hidden">
+        <TabsContent value="recent" className="mt-0 flex flex-col gap-3 outline-none data-[state=inactive]:hidden">
           <div className="flex shrink-0 flex-wrap gap-2">
             <Input
               type="search"
               placeholder="Filter sessions…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="min-w-[180px] flex-1"
+              className="min-h-11 min-w-[180px] flex-1"
             />
             <div className="flex gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
               <Button
                 type="button"
                 variant={!isGridView ? "secondary" : "ghost"}
                 size="icon-sm"
-                className="rounded-md"
+                className="rounded-md touch-manipulation"
                 onClick={() => setIsGridView(false)}
                 aria-label="List view"
               >
@@ -171,7 +171,7 @@ export default function SongList({
                 type="button"
                 variant={isGridView ? "secondary" : "ghost"}
                 size="icon-sm"
-                className="rounded-md"
+                className="rounded-md touch-manipulation"
                 onClick={() => setIsGridView(true)}
                 aria-label="Grid view"
               >
@@ -180,7 +180,8 @@ export default function SongList({
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-muted/20 p-3">
+          {/* Fixed max height so list scrolls inside; parent no longer needs h-screen / overflow-hidden */}
+          <div className="max-h-[min(70vh,40rem)] min-h-[12rem] overflow-y-auto overflow-x-hidden rounded-lg border border-border bg-muted/20 p-3 overscroll-contain">
             {isLoading && (
               <div className="flex flex-col items-center justify-center gap-2 py-14 text-muted-foreground">
                 <Loader2 className="size-7 animate-spin" />
