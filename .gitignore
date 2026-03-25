@@ -14,3 +14,7 @@ __pycache__/
 
 # Node
 node_modules/
+
+# Claude
+CLAUDE.md
+**/AGENTS.md

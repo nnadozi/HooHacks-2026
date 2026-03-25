@@ -48,7 +48,7 @@ export function usePoseDetection(): UsePoseDetectionReturn {
     const mod = await import("@mediapipe/tasks-vision");
 
     const vision = await mod.FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.33/wasm"
     );
 
     const landmarker = await mod.PoseLandmarker.createFromOptions(vision, {
